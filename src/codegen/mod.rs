@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 use thiserror::Error;
 use crate::ast::module::{CaseArm, MetadataBlock, ModuleDefinition, ValidationSeverity};
 use crate::ast::template::ResourceInstance;
@@ -65,16 +66,18 @@ fn resolve_error_to_issue(e: ResolveError, kind: IssueKind) -> ValidationIssue {
 
 // ─── public API ───────────────────────────────────────────────────────────────
 
-/// Render the code template for one case arm, substituting `$variable_name`
-/// references via `ctx` before handing the result to Tera.
+/// Perform variable substitution and Tera rendering on an arbitrary code string,
+/// using the variable declarations from `arm` for resolution.
 ///
-/// IaC `${...}` interpolation sequences are left untouched.
-pub fn render_code_block(arm: &CaseArm, ctx: &ResolveContext) -> Result<String, CodegenError> {
+/// This is the core rendering logic shared by both `render_code_block` (which
+/// uses `arm.code.value`) and the fragment-expanded path in `assemble_output`
+/// (which may provide a different code string after `expand_includes`).
+fn render_raw_code(code: &str, arm: &CaseArm, ctx: &ResolveContext) -> Result<String, CodegenError> {
     // Sort longest-first to prevent shorter name matching inside longer name
     let mut vars: Vec<_> = arm.variables.iter().collect();
     vars.sort_by(|a, b| b.value.name.len().cmp(&a.value.name.len()));
 
-    let mut rendered = arm.code.value.clone();
+    let mut rendered = code.to_string();
     for var_ref in &vars {
         let value = ctx.resolve(&var_ref.value.name, &var_ref.span)
             .map_err(|e| CodegenError::UnresolvedVariable {
@@ -92,6 +95,14 @@ pub fn render_code_block(arm: &CaseArm, ctx: &ResolveContext) -> Result<String, 
             span: arm.code.span.clone(),
             reason: e.to_string(),
         })
+}
+
+/// Render the code template for one case arm, substituting `$variable_name`
+/// references via `ctx` before handing the result to Tera.
+///
+/// IaC `${...}` interpolation sequences are left untouched.
+pub fn render_code_block(arm: &CaseArm, ctx: &ResolveContext) -> Result<String, CodegenError> {
+    render_raw_code(&arm.code.value, arm, ctx)
 }
 
 /// Run the full validation pipeline for a module + resource pair.
@@ -176,6 +187,9 @@ pub enum AssembleError {
     /// A Tera or variable-substitution failure during rendering.
     #[error("render error: {0}")]
     RenderError(#[from] CodegenError),
+    /// Fragment expansion failed (circular include, file not found, etc.).
+    #[error("fragment expansion error: {0}")]
+    FragmentExpansion(#[from] crate::fragment::FragmentError),
 }
 
 /// Assemble the final IaC output for one `AssemblyGroup`.
@@ -186,20 +200,30 @@ pub enum AssembleError {
 ///    accumulating ALL issues across all resources.
 /// 2. If any accumulated issue has `IssueKind::Error`, abort and return
 ///    `Err(AssembleError::ValidationErrors(...))` — rendering is skipped.
-/// 3. Render each resource's code block via `render_code_block`, accumulating
-///    rendered strings in topo order.
+/// 3. For each resource, optionally run `expand_includes` on the arm's code
+///    (when `include_path` is `Some`), then render via `render_raw_code`.
+///    Registry-coordinate deferred includes are surfaced as `Warning` issues.
 /// 4. Prepend a governance comment from the first resource's module metadata
 ///    (if any governance fields are set). Using the first module's metadata is
 ///    correct for the community tier: a single template typically uses one module;
 ///    multi-module templates surface metadata from the first resource's module.
 /// 5. Return `Ok(AssembleResult)` with the combined output and non-error issues.
+///
+/// # Parameters
+///
+/// `include_path` — when `Some`, enables the fragment pre-pass: every `include`
+/// directive in each arm's code is expanded before Tera rendering. Pass `None`
+/// to skip the pre-pass (identical behaviour to Phase 5).
 pub fn assemble_output(
     group: &AssemblyGroup,
     module_map: &HashMap<String, ModuleDefinition>,
     arm_map: &HashMap<String, CaseArm>,
     ctx: &ResolveContext,
     resource_map: &HashMap<String, ResourceInstance>,
+    include_path: Option<&Path>,
 ) -> Result<AssembleResult, AssembleError> {
+    use std::sync::Arc;
+
     // ── Stage 1: validation across all resources (collect-all, no fail-fast) ──
     let mut all_issues: Vec<ValidationIssue> = Vec::new();
 
@@ -228,7 +252,46 @@ pub fn assemble_output(
 
     for resource_name in &group.resources_in_order {
         if let Some(arm) = arm_map.get(resource_name) {
-            let rendered = render_code_block(arm, ctx)?;
+            let code_to_render = if let Some(inc_path) = include_path {
+                let source_file = arm.code.span.file.as_ref();
+                let (expanded, source_map) = crate::fragment::expand_includes(
+                    &arm.code.value,
+                    source_file,
+                    inc_path,
+                    &mut Vec::new(),
+                )?;
+
+                // Collect deferred registry coordinates as Warning issues.
+                // expand_includes marks deferred entries with source_file "<deferred:…>".
+                for entry in &source_map.entries {
+                    if entry.source_file.starts_with("<deferred:") {
+                        // Extract coordinate from marker "<deferred:org/name@1>".
+                        let coordinate = entry.source_file
+                            .trim_start_matches("<deferred:")
+                            .trim_end_matches('>');
+                        all_issues.push(ValidationIssue {
+                            span: Span {
+                                file: Arc::from(source_file),
+                                start_line: 0,
+                                start_col: 0,
+                                end_line: 0,
+                                end_col: 0,
+                            },
+                            message: format!(
+                                "registry coordinate '{}' deferred — registry not available in community tier",
+                                coordinate
+                            ),
+                            severity: IssueKind::Warning,
+                        });
+                    }
+                }
+
+                expanded
+            } else {
+                arm.code.value.clone()
+            };
+
+            let rendered = render_raw_code(&code_to_render, arm, ctx)?;
             rendered_blocks.push(rendered);
         }
     }
@@ -474,6 +537,86 @@ mod tests {
             comment.contains("security_tier: high"),
             "must contain security_tier value — got: {comment}"
         );
+    }
+
+    // FRAG-01: assemble_output with include_path=None and no includes → no regression.
+    #[test]
+    fn test_assemble_output_none_include_path_no_regression() {
+        use crate::graph::AssemblyGroup;
+        // A simple arm with no include directives — None include_path must behave like Phase 5.
+        let code = r#"resource "aws_s3_bucket" "$bucket_name" {}"#;
+        let arm = make_case_arm(code, &["bucket_name"]);
+        let ctx = make_context(&[("bucket_name", "my-bucket")]);
+
+        let mut arm_map = HashMap::new();
+        arm_map.insert("res1".to_string(), arm);
+
+        let module = make_module_with_rules(vec![]);
+        let mut module_map = HashMap::new();
+        module_map.insert("res1".to_string(), module);
+
+        let resource = make_resource(vec![]);
+        let mut resource_map = HashMap::new();
+        resource_map.insert("res1".to_string(), resource);
+
+        let group = AssemblyGroup {
+            provider: "aws".to_string(),
+            region: "us-east-1".to_string(),
+            resources_in_order: vec!["res1".to_string()],
+        };
+
+        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None)
+            .expect("assemble_output with no includes must succeed");
+        assert!(
+            result.output.contains("my-bucket"),
+            "output must contain substituted variable value; got: {:?}",
+            result.output
+        );
+    }
+
+    // FRAG-03: AssembleError::FragmentExpansion variant wraps FragmentError.
+    #[test]
+    fn test_assemble_error_fragment_expansion_variant() {
+        use crate::graph::AssemblyGroup;
+        use std::path::PathBuf;
+
+        // An arm whose code tries to include a non-existent file → FragmentExpansion error.
+        let code = r#"include "nonexistent_file.gfrag""#;
+        let arm = make_case_arm(code, &[]);
+        let ctx = make_context(&[]);
+
+        let mut arm_map = HashMap::new();
+        arm_map.insert("res1".to_string(), arm);
+
+        let module = make_module_with_rules(vec![]);
+        let mut module_map = HashMap::new();
+        module_map.insert("res1".to_string(), module);
+
+        let resource = make_resource(vec![]);
+        let mut resource_map = HashMap::new();
+        resource_map.insert("res1".to_string(), resource);
+
+        let group = AssemblyGroup {
+            provider: "aws".to_string(),
+            region: "us-east-1".to_string(),
+            resources_in_order: vec!["res1".to_string()],
+        };
+
+        // Use a temp dir as include_path so the file won't be found.
+        let tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures");
+        let result = assemble_output(
+            &group, &module_map, &arm_map, &ctx, &resource_map,
+            Some(&PathBuf::from("/nonexistent_include_path")),
+        );
+        // Must fail — include path doesn't contain "nonexistent_file.gfrag".
+        assert!(result.is_err(), "assemble_output must fail when include file is not found");
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, AssembleError::FragmentExpansion(_)),
+            "error must be AssembleError::FragmentExpansion; got: {:?}",
+            err
+        );
+        let _ = tmp; // suppress unused warning
     }
 
     // LANG-11: All six governance fields appear in the comment block when set.
