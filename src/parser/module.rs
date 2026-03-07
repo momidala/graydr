@@ -182,10 +182,22 @@ fn parse_metadata(
 ) -> Result<Spanned<MetadataBlock>, ParseError> {
     let block = require_block(source, body, "metadata", ".gmod", file)?;
     let span = hcl_range_to_graydr(source, block.span().unwrap_or(0..0), file);
-    Ok(Spanned {
-        value: MetadataBlock { span: span.clone(), ..Default::default() },
-        span,
-    })
+
+    let mut meta = MetadataBlock { span: span.clone(), ..Default::default() };
+
+    for attr in block.body.attributes() {
+        match attr.key.as_str() {
+            "security_tier"          => meta.security_tier = Some(expr_to_string_content(&attr.value)),
+            "compliance_frameworks"  => meta.compliance_frameworks = Some(expr_to_string_content(&attr.value)),
+            "cost_tier"              => meta.cost_tier = Some(expr_to_string_content(&attr.value)),
+            "data_classification"    => meta.data_classification = Some(expr_to_string_content(&attr.value)),
+            "disaster_recovery_tier" => meta.disaster_recovery_tier = Some(expr_to_string_content(&attr.value)),
+            "approval_required"      => meta.approval_required = attr.value.as_bool(),
+            _ => {} // description, version, unknowns silently skipped
+        }
+    }
+
+    Ok(Spanned { value: meta, span })
 }
 
 // ─── interface ────────────────────────────────────────────────────────────────
