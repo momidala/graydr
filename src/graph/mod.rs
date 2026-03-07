@@ -6,6 +6,7 @@
 use petgraph::graph::DiGraph;
 use petgraph::algo::{toposort, kosaraju_scc};
 use std::collections::HashMap;
+use std::sync::Arc;
 use crate::resolver::error::ResolveError;
 use crate::ast::span::Span;
 
@@ -21,7 +22,13 @@ pub struct DependencyGraph {
 impl DependencyGraph {
     /// Build a new graph with the given resource names as nodes (no edges yet).
     pub fn new(resource_names: &[String]) -> Self {
-        todo!()
+        let mut graph = DiGraph::new();
+        let mut name_to_idx = HashMap::new();
+        for name in resource_names {
+            let idx = graph.add_node(name.clone());
+            name_to_idx.insert(name.clone(), idx);
+        }
+        Self { graph, name_to_idx }
     }
 
     /// Add an explicit edge from `dependency` to `dependent` (dependency before dependent).
@@ -33,7 +40,22 @@ impl DependencyGraph {
         dependent: &str,
         resource_span: &Span,
     ) -> Result<(), ResolveError> {
-        todo!()
+        let dep_idx = self.name_to_idx.get(dependency).copied().ok_or_else(|| {
+            ResolveError::UnknownDependency {
+                span: resource_span.clone(),
+                resource: dependent.to_string(),
+                unknown: dependency.to_string(),
+            }
+        })?;
+        let ant_idx = self.name_to_idx.get(dependent).copied().ok_or_else(|| {
+            ResolveError::UnknownDependency {
+                span: resource_span.clone(),
+                resource: dependency.to_string(),
+                unknown: dependent.to_string(),
+            }
+        })?;
+        self.graph.add_edge(dep_idx, ant_idx, ());
+        Ok(())
     }
 
     /// Add implicit edges inferred from output variable references.
@@ -48,14 +70,44 @@ impl DependencyGraph {
         consumer_name: &str,
         consumer_input_vars: &[String],
     ) {
-        todo!()
+        for var_name in consumer_input_vars {
+            if let Some(producer) = output_var_map.get(var_name) {
+                if let (Some(&producer_idx), Some(&consumer_idx)) = (
+                    self.name_to_idx.get(producer),
+                    self.name_to_idx.get(consumer_name),
+                ) {
+                    self.graph.add_edge(producer_idx, consumer_idx, ());
+                }
+            }
+        }
     }
 
     /// Return resources in topological order (dependencies before dependents).
     ///
     /// Returns `Err(CircularDependency)` if a cycle is detected.
     pub fn topo_order(&self) -> Result<Vec<String>, ResolveError> {
-        todo!()
+        match toposort(&self.graph, None) {
+            Ok(order) => {
+                let names = order.iter().map(|&idx| self.graph[idx].clone()).collect();
+                Ok(names)
+            }
+            Err(_cycle) => {
+                let sccs = kosaraju_scc(&self.graph);
+                let members: Vec<String> = sccs
+                    .into_iter()
+                    .filter(|scc| scc.len() > 1)
+                    .flat_map(|scc| scc.into_iter().map(|idx| self.graph[idx].clone()))
+                    .collect();
+                let span = Span {
+                    file: Arc::from(""),
+                    start_line: 0,
+                    start_col: 0,
+                    end_line: 0,
+                    end_col: 0,
+                };
+                Err(ResolveError::CircularDependency { span, members })
+            }
+        }
     }
 }
 
@@ -85,7 +137,34 @@ pub fn assemble_by_provider_region(
     region_map: &HashMap<String, String>,
     region_mapping: &HashMap<String, String>,
 ) -> Vec<AssemblyGroup> {
-    todo!()
+    use std::collections::BTreeMap;
+
+    let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+
+    for resource_name in topo_order {
+        let provider = match provider_map.get(resource_name) {
+            Some(p) => p.clone(),
+            None => continue,
+        };
+        let logical_region = match region_map.get(resource_name) {
+            Some(r) => r.clone(),
+            None => continue,
+        };
+        let physical_region = resolve_region(&logical_region, region_mapping);
+        groups
+            .entry((provider, physical_region))
+            .or_default()
+            .push(resource_name.clone());
+    }
+
+    groups
+        .into_iter()
+        .map(|((provider, region), resources_in_order)| AssemblyGroup {
+            provider,
+            region,
+            resources_in_order,
+        })
+        .collect()
 }
 
 #[cfg(test)]
