@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use thiserror::Error;
 use crate::ast::module::{CaseArm, MetadataBlock, ModuleDefinition, ValidationSeverity};
 use crate::ast::template::ResourceInstance;
 use crate::ast::span::Span;
 use crate::resolver::context::ResolveContext;
 use crate::resolver::error::ResolveError;
+use crate::graph::AssemblyGroup;
 
 /// Errors that can occur during code generation / rendering.
 #[derive(Debug, Error)]
@@ -155,13 +157,104 @@ pub fn format_governance_comment(meta: &MetadataBlock) -> Option<String> {
     }
 }
 
-/// Assemble the final output string from rendered code, validation results,
-/// and the governance comment block.
+/// The successful result of `assemble_output`.
+pub struct AssembleResult {
+    /// Combined IaC output string (governance comment prepended if metadata present).
+    pub output: String,
+    /// Warnings and infos from the validation pipeline (errors are never present here —
+    /// they abort rendering and are returned as `AssembleError::ValidationErrors`).
+    pub issues: Vec<ValidationIssue>,
+}
+
+/// Error returned by `assemble_output`.
+#[derive(Debug, Error)]
+pub enum AssembleError {
+    /// One or more `IssueKind::Error` issues — rendering was aborted.
+    #[error("validation errors prevented rendering")]
+    ValidationErrors(Vec<ValidationIssue>),
+    /// A Tera or variable-substitution failure during rendering.
+    #[error("render error: {0}")]
+    RenderError(#[from] CodegenError),
+}
+
+/// Assemble the final IaC output for one `AssemblyGroup`.
 ///
-/// Exact signature is finalized in Plan 03 Task 2 once render_code_block is
-/// implemented. Body is `todo!()` to avoid committing to parameters prematurely.
-pub fn assemble_output() -> String {
-    todo!("Wave 2: wire validation + render + governance comment")
+/// # Pipeline
+///
+/// 1. Run `run_validation_pipeline` for every resource in topo order,
+///    accumulating ALL issues across all resources.
+/// 2. If any accumulated issue has `IssueKind::Error`, abort and return
+///    `Err(AssembleError::ValidationErrors(...))` — rendering is skipped.
+/// 3. Render each resource's code block via `render_code_block`, accumulating
+///    rendered strings in topo order.
+/// 4. Prepend a governance comment from the first resource's module metadata
+///    (if any governance fields are set). Using the first module's metadata is
+///    correct for the community tier: a single template typically uses one module;
+///    multi-module templates surface metadata from the first resource's module.
+/// 5. Return `Ok(AssembleResult)` with the combined output and non-error issues.
+pub fn assemble_output(
+    group: &AssemblyGroup,
+    module_map: &HashMap<String, ModuleDefinition>,
+    arm_map: &HashMap<String, CaseArm>,
+    ctx: &ResolveContext,
+    resource_map: &HashMap<String, ResourceInstance>,
+) -> Result<AssembleResult, AssembleError> {
+    // ── Stage 1: validation across all resources (collect-all, no fail-fast) ──
+    let mut all_issues: Vec<ValidationIssue> = Vec::new();
+
+    for resource_name in &group.resources_in_order {
+        if let (Some(module), Some(resource)) = (
+            module_map.get(resource_name),
+            resource_map.get(resource_name),
+        ) {
+            let issues = run_validation_pipeline(module, resource, ctx);
+            all_issues.extend(issues);
+        }
+    }
+
+    // ── Stage 2: abort if any Error-severity issue found ──────────────────────
+    let has_errors = all_issues.iter().any(|i| i.severity == IssueKind::Error);
+    if has_errors {
+        let error_issues: Vec<ValidationIssue> = all_issues
+            .into_iter()
+            .filter(|i| i.severity == IssueKind::Error)
+            .collect();
+        return Err(AssembleError::ValidationErrors(error_issues));
+    }
+
+    // ── Stage 3: render each resource in topo order ───────────────────────────
+    let mut rendered_blocks: Vec<String> = Vec::new();
+
+    for resource_name in &group.resources_in_order {
+        if let Some(arm) = arm_map.get(resource_name) {
+            let rendered = render_code_block(arm, ctx)?;
+            rendered_blocks.push(rendered);
+        }
+    }
+
+    // ── Stage 4: governance comment from first resource's module ──────────────
+    let governance_comment = group.resources_in_order
+        .first()
+        .and_then(|name| module_map.get(name))
+        .and_then(|module| format_governance_comment(&module.metadata.value));
+
+    // ── Stage 5: combine output ───────────────────────────────────────────────
+    let code_output = rendered_blocks.join("\n");
+    let output = match governance_comment {
+        Some(comment) => format!("{}{}", comment, code_output),
+        None => code_output,
+    };
+
+    // non-error issues (warnings, infos) pass through to caller
+    let non_error_issues: Vec<ValidationIssue> = all_issues
+        .into_iter()
+        .filter(|i| i.severity != IssueKind::Error)
+        .collect();
+
+    Ok(AssembleResult {
+        output,
+        issues: non_error_issues,
+    })
 }
 
 #[cfg(test)]
