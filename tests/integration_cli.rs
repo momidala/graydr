@@ -103,6 +103,16 @@ fn test_init_template_writes_file() {
     );
     let contents = std::fs::read_to_string(out_path).expect("could not read output file");
     assert!(!contents.is_empty(), "expected non-empty scaffold file");
+
+    // Validate roundtrip: the scaffold file must parse cleanly through graydr validate.
+    // Model: test_init_module_writes_file performs the same step for .gmod output.
+    let validate_output = cargo_run(&["validate", out_path]);
+    assert!(
+        validate_output.status.success(),
+        "graydr validate failed on generated template scaffold at {}: {}",
+        out_path,
+        String::from_utf8_lossy(&validate_output.stderr)
+    );
 }
 
 #[test]
