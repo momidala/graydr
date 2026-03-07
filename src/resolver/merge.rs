@@ -2,20 +2,107 @@ use std::collections::HashMap;
 use serde_yaml_ng::Value;
 use crate::resolver::error::ResolveError;
 
-pub fn deep_merge(_dst: &mut Value, _src: Value) {
-    todo!("implemented in plan 02-02")
+pub fn deep_merge(dst: &mut Value, src: Value) {
+    match (dst, src) {
+        (Value::Mapping(dst_map), Value::Mapping(src_map)) => {
+            for (key, src_val) in src_map {
+                match dst_map.get_mut(&key) {
+                    Some(dst_val) => deep_merge(dst_val, src_val),
+                    None => { dst_map.insert(key, src_val); }
+                }
+            }
+        }
+        (dst, src) => *dst = src,
+    }
 }
 
-pub fn flatten_to_dotted(_value: Value, _prefix: &str, _out: &mut HashMap<String, String>) -> Result<(), ResolveError> {
-    todo!("implemented in plan 02-02")
+pub fn flatten_to_dotted(value: Value, prefix: &str, out: &mut HashMap<String, String>) -> Result<(), ResolveError> {
+    match value {
+        Value::Mapping(map) => {
+            for (k, v) in map {
+                let key_str = match &k {
+                    Value::String(s) => s.clone(),
+                    _ => continue, // non-string map key: skip silently
+                };
+                let new_prefix = if prefix.is_empty() {
+                    key_str
+                } else {
+                    format!("{}.{}", prefix, key_str)
+                };
+                flatten_to_dotted(v, &new_prefix, out)?;
+            }
+        }
+        Value::String(s) => {
+            out.insert(prefix.to_string(), s);
+        }
+        Value::Bool(b) => {
+            out.insert(prefix.to_string(), b.to_string());
+        }
+        Value::Number(n) => {
+            out.insert(prefix.to_string(), n.to_string());
+        }
+        Value::Null => {
+            // skip — null values produce no map entry
+        }
+        Value::Sequence(_) => {
+            return Err(ResolveError::PropertiesLoadError {
+                path: String::new(),
+                reason: format!(
+                    "sequence values are not supported for variable bindings (key: '{}')",
+                    prefix
+                ),
+            });
+        }
+        Value::Tagged(tagged) => {
+            // Treat tagged values by recursing into the value
+            flatten_to_dotted(tagged.value, prefix, out)?;
+        }
+    }
+    Ok(())
 }
 
-pub fn load_properties_file(_path: &str) -> Result<HashMap<String, String>, ResolveError> {
-    todo!("implemented in plan 02-02")
+pub fn load_properties_file(path: &str) -> Result<HashMap<String, String>, ResolveError> {
+    let content = std::fs::read_to_string(path).map_err(|e| ResolveError::PropertiesLoadError {
+        path: path.to_string(),
+        reason: e.to_string(),
+    })?;
+
+    let value: Value = if path.ends_with(".json") {
+        let json_val: serde_json::Value = serde_json::from_str(&content).map_err(|e| ResolveError::PropertiesLoadError {
+            path: path.to_string(),
+            reason: e.to_string(),
+        })?;
+        let json_str = serde_json::to_string(&json_val).map_err(|e| ResolveError::PropertiesLoadError {
+            path: path.to_string(),
+            reason: e.to_string(),
+        })?;
+        serde_yaml_ng::from_str(&json_str).map_err(|e| ResolveError::PropertiesLoadError {
+            path: path.to_string(),
+            reason: e.to_string(),
+        })?
+    } else {
+        serde_yaml_ng::from_str(&content).map_err(|e| ResolveError::PropertiesLoadError {
+            path: path.to_string(),
+            reason: e.to_string(),
+        })?
+    };
+
+    let mut out = HashMap::new();
+    flatten_to_dotted(value, "", &mut out).map_err(|e| match e {
+        ResolveError::PropertiesLoadError { reason, .. } => ResolveError::PropertiesLoadError {
+            path: path.to_string(),
+            reason,
+        },
+        other => other,
+    })?;
+    Ok(out)
 }
 
-pub fn parse_cli_flag(_flag: &str) -> Option<(String, String)> {
-    todo!("implemented in plan 02-02")
+pub fn parse_cli_flag(flag: &str) -> Option<(String, String)> {
+    let eq_pos = flag.find('=')?;
+    let key = flag[..eq_pos].to_string();
+    let value = flag[eq_pos + 1..].to_string();
+    Some((key, value))
 }
 
 #[cfg(test)]

@@ -24,6 +24,7 @@ tera = "1.20"
 clap = { version = "4.5", features = ["derive", "cargo"] }
 regex = "1.11"
 evalexpr = "11"
+serde_json = "1"
 
 [dev-dependencies]
 pretty_assertions = "1.4"
