@@ -131,4 +131,49 @@ mod tests {
         assert_eq!(collected.get("b"), Some(&"2"));
         assert_eq!(collected.len(), 2);
     }
+
+    #[test]
+    fn test_extract_region_mapping_basic() {
+        let ctx = ResolveContext::build(
+            make_map(&[]),
+            make_map(&[]),
+            make_map(&[
+                ("region_mapping.us-east", "us-east-1"),
+                ("region_mapping.eu-west", "eu-west-1"),
+            ]),
+            make_map(&[]),
+        );
+        let mapping = ctx.extract_region_mapping();
+        assert_eq!(mapping.get("us-east"), Some(&"us-east-1".to_string()));
+        assert_eq!(mapping.get("eu-west"), Some(&"eu-west-1".to_string()));
+        assert_eq!(mapping.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_region_mapping_empty() {
+        let ctx = ResolveContext::build(
+            make_map(&[("provider", "aws")]),
+            make_map(&[]),
+            make_map(&[]),
+            make_map(&[]),
+        );
+        let mapping = ctx.extract_region_mapping();
+        assert!(mapping.is_empty());
+    }
+
+    #[test]
+    fn test_extract_region_mapping_ignores_other_keys() {
+        let ctx = ResolveContext::build(
+            make_map(&[]),
+            make_map(&[]),
+            make_map(&[
+                ("region_mapping.us-east", "us-east-1"),
+                ("provider", "aws"),
+            ]),
+            make_map(&[]),
+        );
+        let mapping = ctx.extract_region_mapping();
+        assert_eq!(mapping.get("us-east"), Some(&"us-east-1".to_string()));
+        assert_eq!(mapping.len(), 1, "only region_mapping.* keys should be extracted");
+    }
 }
