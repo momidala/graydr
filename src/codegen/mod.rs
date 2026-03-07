@@ -158,6 +158,7 @@ pub fn format_governance_comment(meta: &MetadataBlock) -> Option<String> {
 }
 
 /// The successful result of `assemble_output`.
+#[derive(Debug)]
 pub struct AssembleResult {
     /// Combined IaC output string (governance comment prepended if metadata present).
     pub output: String,
