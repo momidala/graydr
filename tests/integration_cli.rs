@@ -38,7 +38,6 @@ fn test_compile_end_to_end() {
 }
 
 #[test]
-#[ignore] // RED: binary validate subcommand not implemented yet — remove when Plan 02 is done
 fn test_validate_valid_files() {
     let output = cargo_run(&[
         "validate",
@@ -53,7 +52,6 @@ fn test_validate_valid_files() {
 }
 
 #[test]
-#[ignore] // RED: binary validate subcommand not implemented yet — remove when Plan 02 is done
 fn test_validate_all_errors_reported() {
     let output = cargo_run(&["validate", &fixture("invalid.gmod")]);
     assert!(
@@ -68,7 +66,6 @@ fn test_validate_all_errors_reported() {
 }
 
 #[test]
-#[ignore] // RED: binary init subcommand not implemented yet — remove when Plan 03 is done
 fn test_init_module_writes_file() {
     let out_path = "/tmp/test_scaffold_graydr.gmod";
     // Clean up from a previous run if present
@@ -90,7 +87,6 @@ fn test_init_module_writes_file() {
 }
 
 #[test]
-#[ignore] // RED: binary init subcommand not implemented yet — remove when Plan 03 is done
 fn test_init_template_writes_file() {
     let out_path = "/tmp/test_scaffold_graydr.gtpl";
     let _ = std::fs::remove_file(out_path);
@@ -111,7 +107,6 @@ fn test_init_template_writes_file() {
 }
 
 #[test]
-#[ignore] // RED: binary version subcommand not implemented yet — remove when Plan 02 is done
 fn test_version_output() {
     let output = cargo_run(&["version"]);
     assert!(
