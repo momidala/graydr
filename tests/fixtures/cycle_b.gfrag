@@ -1,0 +1,6 @@
+fragment "cycle-b" {
+  code = <<-EOT
+    include "cycle_a.gfrag"
+    resource "aws_s3_bucket" "from_b" {}
+  EOT
+}

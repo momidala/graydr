@@ -1,0 +1,6 @@
+fragment "nested-parent" {
+  code = <<-EOT
+    # parent fragment content
+    resource "aws_instance" "parent" {}
+  EOT
+}
