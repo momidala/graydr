@@ -37,6 +37,24 @@ impl ResolveContext {
     pub fn all_values(&self) -> impl Iterator<Item = (&str, &str)> {
         self.values.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
+
+    /// Extracts the region mapping table from the resolved context.
+    ///
+    /// Keys matching the prefix `region_mapping.` are stripped of their prefix and
+    /// returned as a `HashMap<String, String>` where the key is the logical region name
+    /// and the value is the provider-specific region string.
+    ///
+    /// The mapping table is kept separate from the main variable resolution context
+    /// (not a variable — a translation table). See COMP-05.
+    pub fn extract_region_mapping(&self) -> HashMap<String, String> {
+        const PREFIX: &str = "region_mapping.";
+        self.values
+            .iter()
+            .filter_map(|(k, v)| {
+                k.strip_prefix(PREFIX).map(|logical| (logical.to_string(), v.clone()))
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
