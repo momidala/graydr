@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+use evalexpr::{eval_boolean_with_context, HashMapContext, ContextWithMutableVariables};
 use crate::ast::module::ModuleDefinition;
 use crate::ast::template::ResourceInstance;
 use crate::resolver::error::ResolveError;
@@ -10,18 +12,85 @@ pub enum RuleOutcome {
     EvalError { reason: String },
 }
 
+/// Validate that a resource's input bindings match the module's declared interface.
+///
+/// Returns errors for:
+/// - required inputs that are not wired in the resource
+/// - wired keys that are not declared in the module interface
 pub fn validate_module_inputs(
-    _resource: &ResourceInstance,
-    _module: &ModuleDefinition,
+    resource: &ResourceInstance,
+    module: &ModuleDefinition,
 ) -> Vec<ResolveError> {
-    todo!("implemented in plan 02-04")
+    let module_name = &module.name.value;
+    let declared_inputs: HashMap<&str, bool> = module
+        .interface
+        .value
+        .inputs
+        .iter()
+        .map(|s| (s.value.name.value.as_str(), s.value.required))
+        .collect();
+
+    let wired_keys: HashSet<&str> = resource
+        .inputs
+        .iter()
+        .map(|s| s.value.key.value.as_str())
+        .collect();
+
+    let mut errors = Vec::new();
+
+    // Pass 1: check required inputs are wired
+    for (input_name, required) in &declared_inputs {
+        if *required && !wired_keys.contains(input_name) {
+            errors.push(ResolveError::MissingRequiredInput {
+                span: resource.span.clone(),
+                module: module_name.clone(),
+                input: input_name.to_string(),
+            });
+        }
+    }
+
+    // Pass 2: check wired keys are declared
+    for binding in &resource.inputs {
+        let key = binding.value.key.value.as_str();
+        if !declared_inputs.contains_key(key) {
+            errors.push(ResolveError::UnknownInput {
+                span: binding.value.key.span.clone(),
+                module: module_name.clone(),
+                input: key.to_string(),
+            });
+        }
+    }
+
+    errors
 }
 
+/// Evaluate a single validation rule condition against the resolved context.
+///
+/// The `$` sigil is stripped from the condition string before evaluation,
+/// since module authors write `$variable_name` but evalexpr expects bare identifiers.
 pub fn evaluate_validation_rule(
-    _rule: &ValidationRule,
-    _context: &ResolveContext,
+    rule: &ValidationRule,
+    context: &ResolveContext,
 ) -> RuleOutcome {
-    todo!("implemented in plan 02-04")
+    // Build evalexpr context from resolved values
+    let mut eval_ctx = HashMapContext::new();
+    for (name, value) in context.all_values() {
+        let _ = eval_ctx.set_value(name.to_string().into(), value.to_string().into());
+    }
+
+    // Strip $ sigil before evaluation
+    let stripped = rule.condition.value.replace('$', "");
+
+    match eval_boolean_with_context(&stripped, &eval_ctx) {
+        Ok(true) => RuleOutcome::Passed,
+        Ok(false) => RuleOutcome::Failed {
+            message: rule.error_message.value.clone(),
+            severity: rule.severity.clone(),
+        },
+        Err(e) => RuleOutcome::EvalError {
+            reason: e.to_string(),
+        },
+    }
 }
 
 #[cfg(test)]
@@ -32,8 +101,8 @@ mod tests {
     use crate::ast::span::Span;
     use crate::ast::common::Spanned;
     use crate::ast::module::{
-        InterfaceBlock, InputDecl, OutputDecl, ValidationBlock,
-        MetadataBlock, GenerateBlock, ModuleDefinition,
+        InterfaceBlock, InputDecl, ValidationBlock,
+        MetadataBlock, ModuleDefinition,
     };
     use crate::ast::template::{ResourceInstance, InputBinding};
 
