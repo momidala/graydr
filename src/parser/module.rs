@@ -397,19 +397,20 @@ fn parse_generate(
         }
         let case_span = hcl_range_to_graydr(source, case_block.span().unwrap_or(0..0), file);
 
-        // The label is the variable name string, e.g. `case "provider" { ... }`.
-        let variable_name = case_block
+        // Collect all case labels as variable names — e.g. `case "provider" "engine" { ... }`
+        // produces variable_names = ["provider", "engine"]. Single-variable case produces a
+        // one-element Vec (backward-compatible). Empty labels → ParseError.
+        let variable_names: Vec<Spanned<String>> = case_block
             .labels
-            .first()
-            .map(|l| l.as_str().to_owned())
-            .ok_or_else(|| ParseError::InvalidCaseLabel {
+            .iter()
+            .map(|l| Spanned {
+                value: l.as_str().to_owned(),
                 span: case_span.clone(),
-            })?;
-
-        let variable_name_spanned = Spanned {
-            value: variable_name,
-            span: case_span.clone(),
-        };
+            })
+            .collect();
+        if variable_names.is_empty() {
+            return Err(ParseError::InvalidCaseLabel { span: case_span });
+        }
 
         // Arms are sub-blocks within the case block body.
         // Syntax: `arm_key { code = <<-EOT ... EOT  outputs { ... } }`
@@ -418,7 +419,25 @@ fn parse_generate(
         for arm_block in case_block.body.blocks() {
             let arm_span =
                 hcl_range_to_graydr(source, arm_block.span().unwrap_or(0..0), file);
-            let arm_key = arm_block.ident.as_str().to_owned();
+            // Backward-compatible arm key extraction:
+            // - Single-variable form `aws { ... }`: ident = "aws", labels empty → keys = ["aws"]
+            // - Multi-variable form `arm "aws" "aurora" { ... }`: ident = "arm", labels non-empty
+            //   → keys = ["aws", "aurora"] (labels carry the key values)
+            let arm_keys: Vec<Spanned<String>> = if arm_block.labels.is_empty() {
+                vec![Spanned {
+                    value: arm_block.ident.as_str().to_owned(),
+                    span: arm_span.clone(),
+                }]
+            } else {
+                arm_block
+                    .labels
+                    .iter()
+                    .map(|l| Spanned {
+                        value: l.as_str().to_owned(),
+                        span: arm_span.clone(),
+                    })
+                    .collect()
+            };
 
             // Extract `code` attribute — may be a heredoc or string.
             let code_spanned = arm_block
@@ -448,10 +467,7 @@ fn parse_generate(
             arms.push(Spanned {
                 value: CaseArm {
                     span: arm_span.clone(),
-                    key: Spanned {
-                        value: arm_key,
-                        span: arm_span.clone(),
-                    },
+                    keys: arm_keys,
                     code: code_spanned,
                     variables,
                     outputs: output_mappings,
@@ -463,7 +479,7 @@ fn parse_generate(
         cases.push(Spanned {
             value: CaseBlock {
                 span: case_span.clone(),
-                variable_name: variable_name_spanned,
+                variable_names,
                 arms,
             },
             span: case_span,
@@ -680,7 +696,7 @@ mod tests {
         let m = parse_module_file(GMOD_WITH_CASE_BLOCK, "test.gmod").unwrap();
         let cases = &m.generate.value.cases;
         assert!(!cases.is_empty(), "generate must have at least one case block");
-        assert_eq!(cases[0].value.variable_name.value, "provider");
+        assert_eq!(cases[0].value.variable_names[0].value, "provider");
     }
 
     #[test]
@@ -688,7 +704,7 @@ mod tests {
         let m = parse_module_file(GMOD_WITH_CASE_BLOCK, "test.gmod").unwrap();
         let arms = &m.generate.value.cases[0].value.arms;
         assert!(arms.len() >= 2, "expected aws and azure arms, got {}", arms.len());
-        let keys: Vec<&str> = arms.iter().map(|a| a.value.key.value.as_str()).collect();
+        let keys: Vec<&str> = arms.iter().map(|a| a.value.keys[0].value.as_str()).collect();
         assert!(keys.contains(&"aws"), "aws arm missing — got: {keys:?}");
         assert!(keys.contains(&"azure"), "azure arm missing — got: {keys:?}");
     }
@@ -700,7 +716,7 @@ mod tests {
             .value
             .arms
             .iter()
-            .find(|a| a.value.key.value == "aws")
+            .find(|a| a.value.keys[0].value == "aws")
             .expect("aws arm must exist");
         assert!(
             !aws_arm.value.code.value.is_empty(),
@@ -720,7 +736,7 @@ mod tests {
             .value
             .arms
             .iter()
-            .find(|a| a.value.key.value == "aws")
+            .find(|a| a.value.keys[0].value == "aws")
             .expect("aws arm must exist");
 
         let var_names: Vec<&str> = aws_arm
@@ -786,5 +802,86 @@ mod tests {
         let rules = &m.validation.value.rules;
         assert!(!rules.is_empty(), "validation must have rules");
         assert_eq!(rules[0].value.severity, ValidationSeverity::Error);
+    }
+
+    /// Validation test: confirm hcl-edit parses `arm "aws" "aurora" { code = "x" }`
+    /// with ident = "arm" and two labels ["aws", "aurora"].
+    /// This MUST pass before any multi-variable parser changes are committed.
+    #[test]
+    fn test_multi_label_arm_syntax() {
+        let src = r#"arm "aws" "aurora" { code = "x" }"#;
+        let body = hcl_edit::parser::parse_body(src)
+            .expect("hcl-edit must parse multi-label block syntax");
+        let block = body
+            .blocks()
+            .next()
+            .expect("body must contain exactly one block");
+        assert_eq!(
+            block.ident.as_str(),
+            "arm",
+            "block ident must be 'arm', got: {}",
+            block.ident.as_str()
+        );
+        let labels: Vec<&str> = block.labels.iter().map(|l| l.as_str()).collect();
+        assert_eq!(
+            labels.len(),
+            2,
+            "must have exactly 2 labels, got: {labels:?}"
+        );
+        assert_eq!(labels[0], "aws", "first label must be 'aws', got: {}", labels[0]);
+        assert_eq!(labels[1], "aurora", "second label must be 'aurora', got: {}", labels[1]);
+    }
+
+    /// Multi-variable case dispatch: `case "provider" "engine" { arm "aws" "aurora" { ... } }`
+    /// must produce variable_names with 2 elements and keys with 2 elements.
+    #[test]
+    fn test_multi_variable_case_parses() {
+        const GMOD_MULTI_VAR: &str = r#"module "storage" {
+  metadata {}
+  interface {
+    inputs {}
+    outputs {}
+  }
+  validation {}
+  generate {
+    case "provider" "engine" {
+      arm "aws" "aurora" {
+        code = "x"
+      }
+    }
+  }
+}"#;
+        let m = parse_module_file(GMOD_MULTI_VAR, "test.gmod").unwrap();
+        let cases = &m.generate.value.cases;
+        assert_eq!(cases.len(), 1, "must have exactly one case block");
+        let case = &cases[0].value;
+
+        // variable_names must have two elements
+        assert_eq!(
+            case.variable_names.len(),
+            2,
+            "case must have 2 variable_names, got: {:?}",
+            case.variable_names.iter().map(|v| &v.value).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            case.variable_names[0].value, "provider",
+            "first variable_name must be 'provider'"
+        );
+        assert_eq!(
+            case.variable_names[1].value, "engine",
+            "second variable_name must be 'engine'"
+        );
+
+        // arm keys must have two elements
+        assert_eq!(case.arms.len(), 1, "must have exactly one arm");
+        let arm = &case.arms[0].value;
+        assert_eq!(
+            arm.keys.len(),
+            2,
+            "arm must have 2 keys, got: {:?}",
+            arm.keys.iter().map(|k| &k.value).collect::<Vec<_>>()
+        );
+        assert_eq!(arm.keys[0].value, "aws", "first key must be 'aws'");
+        assert_eq!(arm.keys[1].value, "aurora", "second key must be 'aurora'");
     }
 }

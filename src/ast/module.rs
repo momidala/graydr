@@ -79,22 +79,27 @@ pub struct GenerateBlock {
 
 /// A `case "variable_name" { ... }` dispatch block.
 ///
-/// `variable_name` is the string label from `case "variable_name" { ... }` — e.g. `"provider"`.
+/// `variable_names` holds the string labels from `case "provider" "engine" { ... }`.
+/// Single-variable case is the degenerate one-element case (backward-compatible).
+/// Minimum one element is guaranteed by the parser (returns `InvalidCaseLabel` if empty).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CaseBlock {
     pub span: Span,
-    pub variable_name: Spanned<String>,
+    pub variable_names: Vec<Spanned<String>>,
     pub arms: Vec<Spanned<CaseArm>>,
 }
 
-/// A single arm within a case block — e.g. `"aws" = { code = <<-EOT ... EOT  outputs { ... } }`.
+/// A single arm within a case block — e.g. `aws { code = <<-EOT ... EOT  outputs { ... } }`.
 ///
+/// `keys` holds the arm key values:
+/// - Single-variable form `aws { ... }`: keys = `["aws"]` (from block ident)
+/// - Multi-variable form `arm "aws" "aurora" { ... }`: keys = `["aws", "aurora"]` (from block labels)
 /// `code` holds the raw heredoc/string content.
 /// `variables` is the result of running `scan_variables` on the code content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CaseArm {
     pub span: Span,
-    pub key: Spanned<String>,
+    pub keys: Vec<Spanned<String>>,
     pub code: Spanned<String>,
     pub variables: Vec<SpannedVariable>,
     pub outputs: Vec<Spanned<OutputMapping>>,

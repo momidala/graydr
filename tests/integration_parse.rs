@@ -26,7 +26,7 @@ fn parse_module_from_fixture() {
     assert!(module.generate.span.start_line >= 1);
     // Verify the case block.
     assert!(!module.generate.value.cases.is_empty(), "generate must have at least one case");
-    assert_eq!(module.generate.value.cases[0].value.variable_name.value, "provider");
+    assert_eq!(module.generate.value.cases[0].value.variable_names[0].value, "provider");
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn parse_module_variables_not_iac_interpolation() {
         .value
         .arms
         .iter()
-        .find(|a| a.value.key.value == "aws")
+        .find(|a| a.value.keys[0].value == "aws")
         .expect("aws arm must exist in sample.gmod");
 
     let var_names: Vec<&str> = aws_arm
