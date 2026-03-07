@@ -30,7 +30,7 @@ module "storage" {
 
   generate {
     case "provider" {
-      "aws" = {
+      aws {
         code = <<-EOT
           resource "aws_s3_bucket" "$bucket_name" {
             bucket = "$bucket_name"
@@ -41,7 +41,7 @@ module "storage" {
           bucket_url = "${aws_s3_bucket.$bucket_name.bucket_regional_domain_name}"
         }
       }
-      "azure" = {
+      azure {
         code = <<-EOT
           resource "azurerm_storage_account" "$bucket_name" {
             name     = "$bucket_name"
