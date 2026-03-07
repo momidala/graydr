@@ -1,0 +1,57 @@
+module "storage" {
+  metadata {
+    description = "Cross-cloud object storage module"
+    version     = "0.1.0"
+  }
+
+  interface {
+    inputs {
+      bucket_name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required = true
+        sensitive = false
+      }
+    }
+    outputs {
+      bucket_url = {}
+    }
+  }
+
+  validation {
+    rule "bucket_name_length" {
+      condition     = "$bucket_name != \"\""
+      error_message = "bucket_name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      "aws" = {
+        code = <<-EOT
+          resource "aws_s3_bucket" "$bucket_name" {
+            bucket = "$bucket_name"
+            region = "${var.region}"
+          }
+        EOT
+        outputs {
+          bucket_url = "${aws_s3_bucket.$bucket_name.bucket_regional_domain_name}"
+        }
+      }
+      "azure" = {
+        code = <<-EOT
+          resource "azurerm_storage_account" "$bucket_name" {
+            name     = "$bucket_name"
+            location = "$region"
+          }
+        EOT
+        outputs {
+          bucket_url = "${azurerm_storage_account.$bucket_name.primary_blob_endpoint}"
+        }
+      }
+    }
+  }
+}
