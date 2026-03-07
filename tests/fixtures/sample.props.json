@@ -1,0 +1,9 @@
+{
+  "primary_db": {
+    "size": "XL",
+    "region": "us-east-1",
+    "engine": "postgres"
+  },
+  "provider": "aws",
+  "environment": "production"
+}
