@@ -192,4 +192,116 @@ mod tests {
         assert_eq!(out.get("flag"), Some(&"true".to_string()));
         assert_eq!(out.get("count"), Some(&"42".to_string()));
     }
+
+    // ---- parse_cli_flag tests ----
+
+    #[test]
+    fn test_parse_cli_flag_dotted() {
+        assert_eq!(
+            parse_cli_flag("primary_db.size=XL"),
+            Some(("primary_db.size".to_string(), "XL".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_cli_flag_simple() {
+        assert_eq!(
+            parse_cli_flag("provider=aws"),
+            Some(("provider".to_string(), "aws".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_cli_flag_no_equals() {
+        assert_eq!(parse_cli_flag("noequalssign"), None);
+    }
+
+    #[test]
+    fn test_parse_cli_flag_value_with_equals() {
+        assert_eq!(
+            parse_cli_flag("key=val=ue"),
+            Some(("key".to_string(), "val=ue".to_string()))
+        );
+    }
+
+    // ---- load_properties_file tests ----
+
+    #[test]
+    fn test_load_yaml_file() {
+        use std::io::Write;
+        let mut f = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+        writeln!(f, "primary_db:").unwrap();
+        writeln!(f, "  size: XL").unwrap();
+        writeln!(f, "  region: us-east-1").unwrap();
+        writeln!(f, "  engine: postgres").unwrap();
+        writeln!(f, "provider: aws").unwrap();
+        writeln!(f, "environment: production").unwrap();
+        let path = f.path().to_str().unwrap().to_string();
+        let map = load_properties_file(&path).unwrap();
+        assert_eq!(map.get("primary_db.size"), Some(&"XL".to_string()));
+        assert_eq!(map.get("primary_db.region"), Some(&"us-east-1".to_string()));
+        assert_eq!(map.get("primary_db.engine"), Some(&"postgres".to_string()));
+        assert_eq!(map.get("provider"), Some(&"aws".to_string()));
+        assert_eq!(map.get("environment"), Some(&"production".to_string()));
+    }
+
+    #[test]
+    fn test_load_json_file() {
+        use std::io::Write;
+        let mut f = tempfile::NamedTempFile::with_suffix(".json").unwrap();
+        writeln!(f, r#"{{"primary_db": {{"size": "XL", "region": "us-east-1", "engine": "postgres"}}, "provider": "aws", "environment": "production"}}"#).unwrap();
+        let path = f.path().to_str().unwrap().to_string();
+        let map = load_properties_file(&path).unwrap();
+        assert_eq!(map.get("primary_db.size"), Some(&"XL".to_string()));
+        assert_eq!(map.get("primary_db.region"), Some(&"us-east-1".to_string()));
+        assert_eq!(map.get("primary_db.engine"), Some(&"postgres".to_string()));
+        assert_eq!(map.get("provider"), Some(&"aws".to_string()));
+        assert_eq!(map.get("environment"), Some(&"production".to_string()));
+    }
+
+    #[test]
+    fn test_load_missing_file() {
+        let result = load_properties_file("/nonexistent/path/file.yaml");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ResolveError::PropertiesLoadError { path, .. } => {
+                assert_eq!(path, "/nonexistent/path/file.yaml");
+            }
+            other => panic!("expected PropertiesLoadError, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_two_yaml_files_merge() {
+        use std::io::Write;
+        let mut f1 = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+        writeln!(f1, "provider: aws").unwrap();
+        writeln!(f1, "db:").unwrap();
+        writeln!(f1, "  size: S").unwrap();
+
+        let mut f2 = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+        writeln!(f2, "db:").unwrap();
+        writeln!(f2, "  size: XL").unwrap();
+        writeln!(f2, "  region: us").unwrap();
+
+        let path1 = f1.path().to_str().unwrap().to_string();
+        let path2 = f2.path().to_str().unwrap().to_string();
+
+        let mut merged = Value::Null;
+        for path in &[path1, path2] {
+            let content = std::fs::read_to_string(path).unwrap();
+            let v: Value = serde_yaml_ng::from_str(&content).unwrap();
+            if matches!(merged, Value::Null) {
+                merged = v;
+            } else {
+                deep_merge(&mut merged, v);
+            }
+        }
+        let mut out = HashMap::new();
+        flatten_to_dotted(merged, "", &mut out).unwrap();
+
+        assert_eq!(out.get("provider"), Some(&"aws".to_string()));
+        assert_eq!(out.get("db.size"), Some(&"XL".to_string()));
+        assert_eq!(out.get("db.region"), Some(&"us".to_string()));
+    }
 }
