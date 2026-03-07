@@ -28,7 +28,17 @@ pub enum ResolveError {
         resolved_values: Vec<String>,
         tried_keys: Vec<Vec<String>>,
     },
-    // ForwardOutputReference detection (producing a ForwardOutputReference error) is deferred to Phase 4
-    // where topological sort makes ordering explicit. In Phase 3, a consuming resource declared before
-    // its producer produces UnresolvedVariable.
+
+    #[error("{span}: circular dependency detected; cycle members: {members:?}")]
+    CircularDependency {
+        span: Span,
+        members: Vec<String>,
+    },
+
+    #[error("{span}: resource '{resource}' has unknown dependency '{unknown}' in depends_on")]
+    UnknownDependency {
+        span: Span,
+        resource: String,
+        unknown: String,
+    },
 }
