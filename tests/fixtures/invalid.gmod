@@ -1,0 +1,2 @@
+module {
+  # missing name label — intentional parse error for test_validate_all_errors_reported
