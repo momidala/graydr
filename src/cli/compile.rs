@@ -123,8 +123,38 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
         }
     }
 
-    // ── Step 8: Build ResolveContext ───────────────────────────────────────
-    let ctx = ResolveContext::build(gmod_defaults, gtpl_overrides, properties_map, cli_flags);
+    // ── Step 8: Build ResolveContext (two-pass) ───────────────────────────
+    // Pass 1: build initial context so variable-reference bindings can be resolved.
+    let ctx_initial = ResolveContext::build(
+        gmod_defaults.clone(),
+        gtpl_overrides.clone(),
+        properties_map.clone(),
+        cli_flags.clone(),
+    );
+
+    // Pass 2: resolve variable-reference input bindings and add as bare input aliases.
+    // Module validation rules use bare input names (e.g. `$bucket_name`). Without this,
+    // rules that check `$bucket_name` would fail with EvalError because the context only
+    // holds dotted paths like `primary_db.name` — not the module-local name `bucket_name`.
+    let mut resolved_binding_aliases: HashMap<String, String> = HashMap::new();
+    for (_resource_name, resource) in &resource_map {
+        for binding_sw in &resource.inputs {
+            let binding = &binding_sw.value;
+            let input_key = &binding.key.value;
+            // Only process bindings that have variable references and whose bare name
+            // is not already in the context.
+            if !binding.variables.is_empty() && !ctx_initial.contains(input_key) {
+                if let Some(resolved) = resolve_binding_value(&binding.value.value, &ctx_initial) {
+                    resolved_binding_aliases.insert(input_key.clone(), resolved);
+                }
+            }
+        }
+    }
+
+    // Rebuild with alias entries in gtpl_overrides (lowest priority besides gmod_defaults).
+    let mut augmented_overrides = resolved_binding_aliases;
+    augmented_overrides.extend(gtpl_overrides);
+    let ctx = ResolveContext::build(gmod_defaults, augmented_overrides, properties_map, cli_flags);
 
     // ── Step 9: Dispatch case blocks, collect arm_map ─────────────────────
     let mut arm_map = HashMap::new();
@@ -152,18 +182,25 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
         .with_context(|| "resolving topological order")?;
 
     // ── Step 12: Build provider_map and region_map ─────────────────────────
-    // Resolve the "provider" and "region" input values for each resource
-    // by looking up the resource's input bindings in the resolve context.
+    // Resolve the "provider" and "region" input values for each resource.
+    // Priority: explicit resource input binding > global context variable.
     let mut provider_map: HashMap<String, String> = HashMap::new();
     let mut region_map: HashMap<String, String> = HashMap::new();
 
+    // Zero-span for context lookups that have no source location.
+    let zero_span = {
+        use std::sync::Arc;
+        use crate::ast::span::Span;
+        Span { file: Arc::from(""), start_line: 0, start_col: 0, end_line: 0, end_col: 0 }
+    };
+
     for (resource_name, resource) in &resource_map {
-        // Look up provider binding value from resource inputs
+        // Look up provider/region binding value from resource inputs.
         for binding_sw in &resource.inputs {
             let binding = &binding_sw.value;
             let key = binding.key.value.as_str();
             if key == "provider" {
-                // Resolve the binding value — may be a literal or a variable reference
+                // Resolve the binding value — may be a literal or a variable reference.
                 let resolved = resolve_binding_value(&binding.value.value, &ctx);
                 if let Some(val) = resolved {
                     provider_map.insert(resource_name.clone(), val);
@@ -173,6 +210,18 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
                 if let Some(val) = resolved {
                     region_map.insert(resource_name.clone(), val);
                 }
+            }
+        }
+
+        // Fallback: if no explicit binding, resolve from global context variables.
+        if !provider_map.contains_key(resource_name.as_str()) {
+            if let Ok(val) = ctx.resolve("provider", &zero_span) {
+                provider_map.insert(resource_name.clone(), val.to_string());
+            }
+        }
+        if !region_map.contains_key(resource_name.as_str()) {
+            if let Ok(val) = ctx.resolve("region", &zero_span) {
+                region_map.insert(resource_name.clone(), val.to_string());
             }
         }
     }

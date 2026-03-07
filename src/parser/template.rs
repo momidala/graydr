@@ -338,13 +338,15 @@ fn parse_outputs(
 /// Convert an hcl_edit Expression to its raw string representation.
 ///
 /// For quoted string literals, the surrounding double-quotes are stripped.
+/// Leading/trailing whitespace from the hcl-edit serializer is trimmed first.
 fn expr_to_string(expr: &hcl::edit::expr::Expression) -> String {
     let raw = expr.to_string();
+    let trimmed = raw.trim();
     // Strip surrounding quotes from string literals.
-    if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
-        raw[1..raw.len() - 1].to_owned()
+    if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+        trimmed[1..trimmed.len() - 1].to_owned()
     } else {
-        raw
+        trimmed.to_owned()
     }
 }
 

@@ -17,7 +17,6 @@ fn fixture(name: &str) -> String {
 }
 
 #[test]
-#[ignore] // RED: binary compile subcommand not implemented yet — remove when Plan 02 is done
 fn test_compile_end_to_end() {
     let output = cargo_run(&[
         "compile",
@@ -123,7 +122,6 @@ fn test_version_output() {
 }
 
 #[test]
-#[ignore] // RED: binary compile subcommand not implemented yet — remove when Plan 02 is done
 fn test_multi_properties_merge() {
     // sample.props.yaml has environment=production
     // sample.props.override.yaml has environment=staging (should win — later-takes-precedence)
