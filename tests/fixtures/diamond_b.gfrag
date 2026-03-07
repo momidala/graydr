@@ -1,0 +1,8 @@
+fragment "diamond-b" {
+  code = <<-EOT
+    include "diamond_d.gfrag"
+    resource "aws_lambda_function" "from_b" {
+      function_name = "b-function"
+    }
+  EOT
+}

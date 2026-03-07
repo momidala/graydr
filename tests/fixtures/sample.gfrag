@@ -1,0 +1,7 @@
+fragment "sample" {
+  code = <<-EOT
+    resource "aws_s3_bucket" "sample_bucket" {
+      bucket = "my-bucket"
+    }
+  EOT
+}

@@ -1,0 +1,8 @@
+fragment "diamond-c" {
+  code = <<-EOT
+    include "diamond_d.gfrag"
+    resource "aws_lambda_function" "from_c" {
+      function_name = "c-function"
+    }
+  EOT
+}

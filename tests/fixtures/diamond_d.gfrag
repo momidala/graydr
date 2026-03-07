@@ -1,0 +1,7 @@
+fragment "diamond-d" {
+  code = <<-EOT
+    resource "aws_sqs_queue" "shared" {
+      name = "shared-queue"
+    }
+  EOT
+}
