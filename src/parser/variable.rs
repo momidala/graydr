@@ -22,7 +22,7 @@ pub fn scan_variables(content: &str, base_span: &Span) -> Vec<SpannedVariable> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
         // No lookahead available in the `regex` crate — post-filter instead.
-        Regex::new(r"\$([a-zA-Z_][a-zA-Z0-9_]*)").unwrap()
+        Regex::new(r"\$([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)").unwrap()
     });
 
     let content_bytes = content.as_bytes();
