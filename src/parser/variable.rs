@@ -151,6 +151,14 @@ mod tests {
     }
 
     #[test]
+    fn test_dotted_variable() {
+        let vars = scan_variables("$primary_db.region = $provider", &base());
+        assert_eq!(vars.len(), 2);
+        assert_eq!(vars[0].value.name, "primary_db.region");
+        assert_eq!(vars[1].value.name, "provider");
+    }
+
+    #[test]
     fn test_variable_adjacent_to_iac() {
         // $bucket_name is a graydr var; ${aws_s3_bucket.$bucket_name...} contains
         // both a ${...} boundary AND a nested $bucket_name — the outer ${...} must
