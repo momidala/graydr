@@ -1,0 +1,28 @@
+[package]
+name = "graydr"
+version = "0.2.0"
+edition = "2021"
+
+[[bin]]
+name = "graydr"
+path = "src/main.rs"
+
+[lib]
+name = "graydr"
+path = "src/lib.rs"
+
+[dependencies]
+hcl-rs = "0.19"
+thiserror = "2.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml_ng = "0.10"
+semver = "1.0"
+petgraph = "0.8"
+tera = "1.20"
+clap = { version = "4.5", features = ["derive", "cargo"] }
+regex = "1.11"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+tempfile = "3.10"
