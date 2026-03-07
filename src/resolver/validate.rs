@@ -135,7 +135,7 @@ mod tests {
         ModuleDefinition {
             span: test_span(),
             name: spanned("storage".to_string()),
-            metadata: spanned(MetadataBlock { span: test_span() }),
+            metadata: spanned(MetadataBlock { span: test_span(), ..Default::default() }),
             interface: spanned(InterfaceBlock {
                 span: test_span(),
                 inputs,

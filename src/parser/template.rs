@@ -110,7 +110,7 @@ fn parse_metadata(
 
     let span = block_span(source, block, file);
     Ok(Spanned {
-        value: MetadataBlock { span: span.clone() },
+        value: MetadataBlock { span: span.clone(), ..Default::default() },
         span,
     })
 }

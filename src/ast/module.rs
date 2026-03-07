@@ -12,10 +12,43 @@ pub struct ModuleDefinition {
     pub generate: Spanned<GenerateBlock>,
 }
 
-/// `metadata { ... }` block — minimal for Phase 1; individual fields added as needed.
+/// `metadata { ... }` block — governance fields added in Phase 5.
+///
+/// All governance fields are optional; unset fields are `None`.
+/// `compliance_frameworks` is stored as a comma-joined string for the community tier
+/// (no Vec needed until Phase 7 CLI inspection).
+///
+/// `Default` is manually implemented (Span has no Default) so callers can write
+/// `MetadataBlock { span: my_span, ..Default::default() }` without repeating all fields.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MetadataBlock {
     pub span: Span,
+    pub security_tier: Option<String>,
+    pub compliance_frameworks: Option<String>,
+    pub cost_tier: Option<String>,
+    pub data_classification: Option<String>,
+    pub disaster_recovery_tier: Option<String>,
+    pub approval_required: Option<bool>,
+}
+
+impl Default for MetadataBlock {
+    fn default() -> Self {
+        Self {
+            span: Span {
+                file: std::sync::Arc::from(""),
+                start_line: 0,
+                start_col: 0,
+                end_line: 0,
+                end_col: 0,
+            },
+            security_tier: None,
+            compliance_frameworks: None,
+            cost_tier: None,
+            data_classification: None,
+            disaster_recovery_tier: None,
+            approval_required: None,
+        }
+    }
 }
 
 /// `interface { inputs { ... } outputs { ... } }` block.

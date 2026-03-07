@@ -183,7 +183,7 @@ fn parse_metadata(
     let block = require_block(source, body, "metadata", ".gmod", file)?;
     let span = hcl_range_to_graydr(source, block.span().unwrap_or(0..0), file);
     Ok(Spanned {
-        value: MetadataBlock { span: span.clone() },
+        value: MetadataBlock { span: span.clone(), ..Default::default() },
         span,
     })
 }
