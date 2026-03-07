@@ -38,3 +38,97 @@ impl ResolveContext {
         self.values.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn test_span() -> Span {
+        Span {
+            file: Arc::from("test.gmod"),
+            start_line: 5,
+            start_col: 3,
+            end_line: 5,
+            end_col: 10,
+        }
+    }
+
+    fn make_map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn test_priority_order() {
+        let ctx = ResolveContext::build(
+            make_map(&[("provider", "from_gmod")]),
+            make_map(&[("provider", "from_gtpl")]),
+            make_map(&[("provider", "from_props")]),
+            make_map(&[("provider", "from_cli")]),
+        );
+        assert_eq!(ctx.resolve("provider", &test_span()).unwrap(), "from_cli");
+    }
+
+    #[test]
+    fn test_gtpl_beats_gmod() {
+        let ctx = ResolveContext::build(
+            make_map(&[("size", "S")]),
+            make_map(&[("size", "XL")]),
+            make_map(&[]),
+            make_map(&[]),
+        );
+        assert_eq!(ctx.resolve("size", &test_span()).unwrap(), "XL");
+    }
+
+    #[test]
+    fn test_properties_beat_gtpl() {
+        let ctx = ResolveContext::build(
+            make_map(&[("region", "a")]),
+            make_map(&[("region", "b")]),
+            make_map(&[("region", "c")]),
+            make_map(&[]),
+        );
+        assert_eq!(ctx.resolve("region", &test_span()).unwrap(), "c");
+    }
+
+    #[test]
+    fn test_missing_variable_error() {
+        let ctx = ResolveContext::build(
+            make_map(&[]),
+            make_map(&[]),
+            make_map(&[]),
+            make_map(&[]),
+        );
+        let span = test_span();
+        let err = ctx.resolve("missing_var", &span).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("missing_var"), "error should contain variable name, got: {msg}");
+        assert!(msg.contains("test.gmod:5:3"), "error should contain file:line:col, got: {msg}");
+    }
+
+    #[test]
+    fn test_contains() {
+        let ctx = ResolveContext::build(
+            make_map(&[("key", "val")]),
+            make_map(&[]),
+            make_map(&[]),
+            make_map(&[]),
+        );
+        assert!(ctx.contains("key"));
+        assert!(!ctx.contains("absent"));
+    }
+
+    #[test]
+    fn test_all_values() {
+        let ctx = ResolveContext::build(
+            make_map(&[("a", "1"), ("b", "2")]),
+            make_map(&[]),
+            make_map(&[]),
+            make_map(&[]),
+        );
+        let collected: HashMap<&str, &str> = ctx.all_values().collect();
+        assert_eq!(collected.get("a"), Some(&"1"));
+        assert_eq!(collected.get("b"), Some(&"2"));
+        assert_eq!(collected.len(), 2);
+    }
+}
