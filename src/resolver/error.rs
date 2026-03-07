@@ -20,4 +20,15 @@ pub enum ResolveError {
 
     #[error("failed to load properties file '{path}': {reason}")]
     PropertiesLoadError { path: String, reason: String },
+
+    #[error("{span}: no matching arm for case on {variable_names:?} = {resolved_values:?}; tried arms: {tried_keys:?}")]
+    NoMatchingArm {
+        span: Span,
+        variable_names: Vec<String>,
+        resolved_values: Vec<String>,
+        tried_keys: Vec<Vec<String>>,
+    },
+    // ForwardOutputReference detection (producing a ForwardOutputReference error) is deferred to Phase 4
+    // where topological sort makes ordering explicit. In Phase 3, a consuming resource declared before
+    // its producer produces UnresolvedVariable.
 }

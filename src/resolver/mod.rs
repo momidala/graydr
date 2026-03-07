@@ -1,4 +1,5 @@
 pub mod context;
+pub mod dispatch;
 pub mod error;
 pub mod merge;
 pub mod validate;
