@@ -38,7 +38,7 @@ module "storage" {
           }
         EOT
         outputs {
-          bucket_url = "${aws_s3_bucket.$bucket_name.bucket_regional_domain_name}"
+          bucket_url = "${aws_s3_bucket.storage.bucket_regional_domain_name}"
         }
       }
       azure {
@@ -49,7 +49,7 @@ module "storage" {
           }
         EOT
         outputs {
-          bucket_url = "${azurerm_storage_account.$bucket_name.primary_blob_endpoint}"
+          bucket_url = "${azurerm_storage_account.storage.primary_blob_endpoint}"
         }
       }
     }
