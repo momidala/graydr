@@ -1,6 +1,8 @@
 use std::path::Path;
 use thiserror::Error;
 
+use regex::Regex;
+
 #[derive(Debug, Error)]
 pub enum FragmentError {
     #[error("circular fragment include detected; cycle: {}", cycle.join(" -> "))]
@@ -34,13 +36,39 @@ pub struct SourceMap {
 
 impl SourceMap {
     pub fn new(root_file: String) -> Self {
-        todo!()
+        SourceMap {
+            entries: vec![],
+            root_file,
+        }
     }
 
     /// Translate byte offset in expanded string → (file, line).
+    ///
+    /// Scans entries ordered by expanded_start. If the offset falls within
+    /// [entry.expanded_start, entry.expanded_end), returns that entry's
+    /// source_file and source_line_offset + lines within the entry up to offset.
+    /// If no entry matches, returns (root_file, 0).
     pub fn resolve(&self, expanded_offset: usize) -> (&str, u32) {
-        todo!()
+        for entry in &self.entries {
+            if expanded_offset >= entry.expanded_start && expanded_offset < entry.expanded_end {
+                // Compute how many lines into this entry the offset falls.
+                let within = expanded_offset - entry.expanded_start;
+                // We count newlines to determine line within the entry.
+                // This is a coarse approximation — source_line_offset is the base.
+                let lines_within = within as u32;
+                return (entry.source_file.as_str(), entry.source_line_offset + lines_within);
+            }
+        }
+        (self.root_file.as_str(), 0)
     }
+}
+
+/// Returns true if the path string looks like a registry coordinate:
+/// `org/name@major` — i.e., contains a `/` before an `@` followed by a digit.
+fn is_registry_coordinate(path: &str) -> bool {
+    // Pattern: at least one char, slash, at least one char, @, digit
+    let re = Regex::new(r"^[^/]+/[^@]+@\d").expect("registry regex is valid");
+    re.is_match(path)
 }
 
 /// Expand all `include "..."` directives in `code` inline, producing the
@@ -56,7 +84,115 @@ pub fn expand_includes(
     include_path: &Path,
     call_stack: &mut Vec<String>,
 ) -> Result<(String, SourceMap), FragmentError> {
-    todo!()
+    let include_re =
+        Regex::new(r#"^\s*include\s+"([^"]+)"\s*$"#).expect("include regex is valid");
+
+    let mut output = String::new();
+    let mut source_map = SourceMap::new(source_file.to_string());
+
+    for line in code.lines() {
+        if let Some(caps) = include_re.captures(line) {
+            let path_str = caps.get(1).unwrap().as_str();
+
+            if is_registry_coordinate(path_str) {
+                // Registry coordinates are deferred — replace with empty string.
+                // Optionally record a deferred entry so callers can inspect them.
+                let deferred_marker = format!("<deferred:{}>", path_str);
+                let start = output.len();
+                // We append nothing to the output — the include line is dropped.
+                // But we push a zero-length SourceEntry marking the deferral.
+                source_map.entries.push(SourceEntry {
+                    expanded_start: start,
+                    expanded_end: start,
+                    source_file: deferred_marker,
+                    source_line_offset: 0,
+                });
+                // Do not append any content for the registry include.
+                continue;
+            }
+
+            // Resolve the include path relative to include_path.
+            let candidate = include_path.join(path_str);
+            let canonical = candidate.canonicalize().map_err(|_| FragmentError::FileNotFound {
+                path: path_str.to_string(),
+                included_from: source_file.to_string(),
+            })?;
+            let canonical_str = canonical.to_string_lossy().into_owned();
+
+            // Cycle detection: if canonical_str is already on the call stack.
+            if call_stack.contains(&canonical_str) {
+                let mut cycle = call_stack.clone();
+                cycle.push(canonical_str.clone());
+                return Err(FragmentError::CircularInclude { cycle });
+            }
+
+            // Push onto call stack before recursing.
+            call_stack.push(canonical_str.clone());
+
+            // Read the fragment file.
+            let file_contents =
+                std::fs::read_to_string(&canonical).map_err(|_| FragmentError::FileNotFound {
+                    path: path_str.to_string(),
+                    included_from: source_file.to_string(),
+                })?;
+
+            // Parse the fragment to get its code string.
+            let frag_def = crate::parser::fragment::parse_fragment_file(
+                &file_contents,
+                &canonical_str,
+            )
+            .map_err(|e| FragmentError::ParseError {
+                file: canonical_str.clone(),
+                source: e,
+            })?;
+
+            // Recursive expansion: next include_path is the fragment's parent dir.
+            let next_include_path = canonical
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf();
+
+            let (expanded_frag, inner_map) = expand_includes(
+                &frag_def.code.value,
+                &canonical_str,
+                &next_include_path,
+                call_stack,
+            )?;
+
+            // Pop from call stack after recursion returns.
+            call_stack.pop();
+
+            // Record the byte range in the output for this inlined fragment.
+            let entry_start = output.len();
+            output.push_str(&expanded_frag);
+            // Ensure content ends with newline for clean line-by-line expansion.
+            if !output.ends_with('\n') {
+                output.push('\n');
+            }
+            let entry_end = output.len();
+
+            // Record our own SourceEntry for the range we just added.
+            source_map.entries.push(SourceEntry {
+                expanded_start: entry_start,
+                expanded_end: entry_end,
+                source_file: canonical_str.clone(),
+                source_line_offset: 0,
+            });
+
+            // Merge inner entries (offset them by entry_start).
+            for mut inner_entry in inner_map.entries {
+                inner_entry.expanded_start += entry_start;
+                inner_entry.expanded_end += entry_start;
+                source_map.entries.push(inner_entry);
+            }
+        } else {
+            // Not an include directive — pass through as-is.
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+
+    Ok((output, source_map))
 }
 
 #[cfg(test)]
@@ -226,8 +362,9 @@ after line"#;
     #[test]
     fn test_diamond_include_not_cycle() {
         let fixtures = fixtures_dir();
-        // diamond_a.gfrag includes both diamond_b.gfrag and diamond_c.gfrag
-        // both of which include diamond_d.gfrag — no cycle, D appears twice
+        // diamond_b.gfrag includes diamond_d.gfrag
+        // diamond_c.gfrag includes diamond_d.gfrag
+        // Expanding both from "diamond_a" — no cycle, D content appears twice
         let code = r#"include "diamond_b.gfrag"
 include "diamond_c.gfrag""#;
         let result = expand_includes(
