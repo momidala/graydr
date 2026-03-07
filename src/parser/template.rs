@@ -463,8 +463,8 @@ template "no-metadata" {
     fn test_input_binding_variables_scanned() {
         let tpl = parse_template_file(VALID_GTPL_SOURCE, "test.gtpl").unwrap();
         let res = &tpl.resources[0].value;
-        // Find region binding: "$primary_db.region" — scanner stops at the dot,
-        // so the variable name is "primary_db".
+        // Find region binding: "$primary_db.region" — scanner captures the full
+        // dotted path as a single variable name "primary_db.region".
         let region_binding = res
             .inputs
             .iter()
@@ -477,8 +477,8 @@ template "no-metadata" {
             .map(|v| v.value.name.as_str())
             .collect();
         assert!(
-            vars.contains(&"primary_db"),
-            "Expected 'primary_db' variable in region binding, got: {:?}",
+            vars.contains(&"primary_db.region"),
+            "Expected 'primary_db.region' variable in region binding, got: {:?}",
             vars
         );
     }
