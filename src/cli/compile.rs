@@ -11,6 +11,7 @@ use crate::cli::args::CompileArgs;
 use crate::graph::{DependencyGraph, assemble_by_provider_region};
 use crate::parser::module::parse_module_file;
 use crate::parser::template::parse_template_file;
+use crate::registry::{RegistryClient, RegistryConfig};
 use crate::resolver::context::ResolveContext;
 use crate::resolver::dispatch::dispatch_case;
 use crate::resolver::merge::{deep_merge, flatten_to_dotted, parse_cli_flag};
@@ -234,10 +235,21 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
 
     // ── Step 15+16: Render each group and concatenate output ──────────────
     let include_path = args.include_path.as_deref();
+
+    // Build an optional registry client when GRAYDR_REGISTRY_URL is configured.
+    // When set, expand_includes() will resolve registry coordinates via HTTP.
+    // When unset (empty), existing deferred-marker behavior is preserved.
+    let registry_config = RegistryConfig::from_env();
+    let registry_client = if !registry_config.base_url.is_empty() {
+        Some(RegistryClient::new(registry_config))
+    } else {
+        None
+    };
+
     let mut all_output = String::new();
 
     for group in &groups {
-        let result = assemble_output(group, &module_map, &arm_map, &ctx, &resource_map, include_path)
+        let result = assemble_output(group, &module_map, &arm_map, &ctx, &resource_map, include_path, registry_client.as_ref())
             .with_context(|| format!("assembling output for provider={} region={}", group.provider, group.region))?;
         if !all_output.is_empty() {
             all_output.push('\n');

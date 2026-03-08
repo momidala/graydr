@@ -146,7 +146,7 @@ mod integration_codegen {
         resource_map.insert("storage".to_string(), resource);
 
         // ── Call assemble_output ──────────────────────────────────────────────
-        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None);
+        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None, None);
         assert!(result.is_ok(), "happy path must succeed — got: {:?}", result.err());
 
         let assembled = result.unwrap();
@@ -270,7 +270,7 @@ mod integration_codegen {
         resource_map.insert("storage".to_string(), resource);
 
         // ── Call assemble_output — must return Err ────────────────────────────
-        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None);
+        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None, None);
         assert!(result.is_err(), "missing required input must cause Err — got Ok");
 
         match result.unwrap_err() {

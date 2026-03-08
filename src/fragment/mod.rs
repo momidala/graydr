@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use regex::Regex;
 
-use crate::registry::{RegistryClient, LifecycleState};
+use crate::registry::RegistryClient;
 use crate::registry::coord::ModuleCoord;
 
 #[derive(Debug, Error)]

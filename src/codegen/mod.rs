@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::ast::module::{CaseArm, MetadataBlock, ModuleDefinition, ValidationSeverity};
 use crate::ast::template::ResourceInstance;
 use crate::ast::span::Span;
+use crate::registry::RegistryClient;
 use crate::resolver::context::ResolveContext;
 use crate::resolver::error::ResolveError;
 use crate::graph::AssemblyGroup;
@@ -221,6 +222,7 @@ pub fn assemble_output(
     ctx: &ResolveContext,
     resource_map: &HashMap<String, ResourceInstance>,
     include_path: Option<&Path>,
+    registry: Option<&RegistryClient>,
 ) -> Result<AssembleResult, AssembleError> {
     use std::sync::Arc;
 
@@ -259,7 +261,7 @@ pub fn assemble_output(
                     source_file,
                     inc_path,
                     &mut Vec::new(),
-                    None,
+                    registry,
                 )?;
 
                 // Collect deferred registry coordinates as Warning issues.
@@ -566,7 +568,7 @@ mod tests {
             resources_in_order: vec!["res1".to_string()],
         };
 
-        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None)
+        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None, None)
             .expect("assemble_output with no includes must succeed");
         assert!(
             result.output.contains("my-bucket"),
@@ -608,6 +610,7 @@ mod tests {
         let result = assemble_output(
             &group, &module_map, &arm_map, &ctx, &resource_map,
             Some(&PathBuf::from("/nonexistent_include_path")),
+            None,
         );
         // Must fail — include path doesn't contain "nonexistent_file.gfrag".
         assert!(result.is_err(), "assemble_output must fail when include file is not found");
