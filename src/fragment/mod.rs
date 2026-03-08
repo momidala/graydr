@@ -3,6 +3,9 @@ use thiserror::Error;
 
 use regex::Regex;
 
+use crate::registry::{RegistryClient, LifecycleState};
+use crate::registry::coord::ModuleCoord;
+
 #[derive(Debug, Error)]
 pub enum FragmentError {
     #[error("circular fragment include detected; cycle: {}", cycle.join(" -> "))]
@@ -17,6 +20,8 @@ pub enum FragmentError {
     },
     #[error("registry resolution deferred for '{coordinate}' — registry not available in community tier")]
     RegistryResolutionDeferred { coordinate: String },
+    #[error("module '{coordinate}' is retired and cannot be used; check for a newer active version")]
+    RetiredModule { coordinate: String },
 }
 
 /// Maps byte ranges in the expanded string back to source file positions.
@@ -78,11 +83,14 @@ fn is_registry_coordinate(path: &str) -> bool {
 /// `include_path` — base directory for resolving relative fragment paths.
 /// `call_stack`   — ordered Vec of canonical paths currently on the recursion
 ///                  stack; pass `&mut Vec::new()` at top level.
+/// `registry`     — optional registry client; if Some, registry coordinates are
+///                  fetched and inlined; if None, Phase 6 deferred behavior is preserved.
 pub fn expand_includes(
     code: &str,
     source_file: &str,
     include_path: &Path,
     call_stack: &mut Vec<String>,
+    registry: Option<&RegistryClient>,
 ) -> Result<(String, SourceMap), FragmentError> {
     let include_re =
         Regex::new(r#"^\s*include\s+"([^"]+)"\s*$"#).expect("include regex is valid");
@@ -95,20 +103,58 @@ pub fn expand_includes(
             let path_str = caps.get(1).unwrap().as_str();
 
             if is_registry_coordinate(path_str) {
-                // Registry coordinates are deferred — replace with empty string.
-                // Optionally record a deferred entry so callers can inspect them.
-                let deferred_marker = format!("<deferred:{}>", path_str);
-                let start = output.len();
-                // We append nothing to the output — the include line is dropped.
-                // But we push a zero-length SourceEntry marking the deferral.
-                source_map.entries.push(SourceEntry {
-                    expanded_start: start,
-                    expanded_end: start,
-                    source_file: deferred_marker,
-                    source_line_offset: 0,
-                });
-                // Do not append any content for the registry include.
-                continue;
+                match registry {
+                    None => {
+                        // Preserve Phase 6 deferred behavior when no client is provided.
+                        let deferred_marker = format!("<deferred:{}>", path_str);
+                        let start = output.len();
+                        // We append nothing to the output — the include line is dropped.
+                        // But we push a zero-length SourceEntry marking the deferral.
+                        source_map.entries.push(SourceEntry {
+                            expanded_start: start,
+                            expanded_end: start,
+                            source_file: deferred_marker,
+                            source_line_offset: 0,
+                        });
+                        // Do not append any content for the registry include.
+                        continue;
+                    }
+                    Some(client) => {
+                        let coord = ModuleCoord::parse(path_str)
+                            .map_err(|e| FragmentError::RegistryResolutionDeferred {
+                                coordinate: format!("{} (parse error: {})", path_str, e),
+                            })?;
+                        // Lifecycle check first (REG-04)
+                        let lifecycle = client.get_lifecycle(&coord)
+                            .map_err(|e| FragmentError::RegistryResolutionDeferred {
+                                coordinate: format!("{} (lifecycle check failed: {})", path_str, e),
+                            })?;
+                        if lifecycle.blocks_new_use() {
+                            return Err(FragmentError::RetiredModule {
+                                coordinate: path_str.to_string(),
+                            });
+                        }
+                        // Fetch content
+                        let content = client.fetch_module(&coord)
+                            .map_err(|e| FragmentError::RegistryResolutionDeferred {
+                                coordinate: format!("{} (fetch failed: {})", path_str, e),
+                            })?;
+                        // Inline content the same way as file-based fragments
+                        let entry_start = output.len();
+                        output.push_str(&content);
+                        if !output.ends_with('\n') {
+                            output.push('\n');
+                        }
+                        let entry_end = output.len();
+                        source_map.entries.push(SourceEntry {
+                            expanded_start: entry_start,
+                            expanded_end: entry_end,
+                            source_file: format!("registry:{}", path_str),
+                            source_line_offset: 0,
+                        });
+                        continue;
+                    }
+                }
             }
 
             // Resolve the include path relative to include_path.
@@ -157,6 +203,7 @@ pub fn expand_includes(
                 &canonical_str,
                 &next_include_path,
                 call_stack,
+                registry,
             )?;
 
             // Pop from call stack after recursion returns.
@@ -216,6 +263,7 @@ extra line"#;
             "root.gfrag",
             &fixtures,
             &mut Vec::new(),
+            None,
         )
         .expect("expand_includes should succeed");
 
@@ -247,6 +295,7 @@ extra line"#;
             "root.gfrag",
             &fixtures,
             &mut Vec::new(),
+            None,
         );
         // Must not return FileNotFound — registry coords are deferred, not errored.
         match result {
@@ -269,6 +318,7 @@ extra line"#;
             "root.gfrag",
             &fixtures,
             &mut Vec::new(),
+            None,
         );
         match result {
             Err(FragmentError::CircularInclude { cycle }) => {
@@ -299,6 +349,7 @@ after line"#;
             "root.gfrag",
             &fixtures,
             &mut Vec::new(),
+            None,
         )
         .expect("expand_includes should succeed");
 
@@ -328,6 +379,7 @@ after line"#;
             "root.gfrag",
             &fixtures,
             &mut Vec::new(),
+            None,
         );
         assert!(
             result.is_ok(),
@@ -351,6 +403,7 @@ after line"#;
             "root.gfrag",
             &fixtures,
             &mut Vec::new(),
+            None,
         );
         // Must never produce FileNotFound for a registry coordinate.
         assert!(
@@ -372,6 +425,7 @@ include "diamond_c.gfrag""#;
             "diamond_a.gfrag",
             &fixtures,
             &mut Vec::new(),
+            None,
         );
         // Must NOT return CircularInclude.
         assert!(
@@ -387,5 +441,78 @@ include "diamond_c.gfrag""#;
                 count
             );
         }
+    }
+
+    #[test]
+    fn test_registry_include_with_client_inlines_content() {
+        use mockito::Server;
+        let mut server = Server::new();
+        let _meta = server
+            .mock("GET", "/api/v1/modules/testorg/testmod/1.0.0/meta")
+            .with_body(r#"{"lifecycle":"active"}"#)
+            .with_status(200)
+            .create();
+        let _content = server
+            .mock("GET", "/api/v1/modules/testorg/testmod/1.0.0/content")
+            .with_body("inlined_fragment_code")
+            .with_status(200)
+            .create();
+        let config = crate::registry::RegistryConfig {
+            base_url: server.url(),
+            token: None,
+        };
+        let client = crate::registry::RegistryClient::new(config);
+        // Clear cache to force HTTP fetch
+        let coord = crate::registry::coord::ModuleCoord::parse("testorg/testmod@1.0.0").unwrap();
+        if let Some(p) = crate::registry::cache::cache_path(&coord) {
+            let _ = std::fs::remove_file(&p);
+        }
+        let code = r#"include "testorg/testmod@1.0.0""#;
+        let (expanded, _) = expand_includes(
+            code,
+            "root",
+            std::path::Path::new("."),
+            &mut vec![],
+            Some(&client),
+        )
+        .unwrap();
+        assert!(
+            expanded.contains("inlined_fragment_code"),
+            "registry include must inline fetched content; got: {:?}",
+            expanded
+        );
+        // cleanup
+        if let Some(p) = crate::registry::cache::cache_path(&coord) {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+
+    #[test]
+    fn test_registry_include_retired_module_errors() {
+        use mockito::Server;
+        let mut server = Server::new();
+        let _meta = server
+            .mock("GET", "/api/v1/modules/retorg/retmod/2.0.0/meta")
+            .with_body(r#"{"lifecycle":"retired"}"#)
+            .with_status(200)
+            .create();
+        let config = crate::registry::RegistryConfig {
+            base_url: server.url(),
+            token: None,
+        };
+        let client = crate::registry::RegistryClient::new(config);
+        let code = r#"include "retorg/retmod@2.0.0""#;
+        let result = expand_includes(
+            code,
+            "root",
+            std::path::Path::new("."),
+            &mut vec![],
+            Some(&client),
+        );
+        assert!(
+            matches!(result, Err(FragmentError::RetiredModule { .. })),
+            "retired module must produce RetiredModule error; got: {:?}",
+            result
+        );
     }
 }

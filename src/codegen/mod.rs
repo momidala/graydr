@@ -259,6 +259,7 @@ pub fn assemble_output(
                     source_file,
                     inc_path,
                     &mut Vec::new(),
+                    None,
                 )?;
 
                 // Collect deferred registry coordinates as Warning issues.

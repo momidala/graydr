@@ -20,6 +20,7 @@ fn test_expand_includes_end_to_end() {
         "root.gmod",
         &fixtures,
         &mut Vec::new(),
+        None,
     )
     .expect("expand_includes with sample.gfrag must succeed");
 
@@ -58,6 +59,7 @@ fn test_circular_include_hard_error() {
         "root.gmod",
         &fixtures,
         &mut Vec::new(),
+        None,
     );
 
     assert!(result.is_err(), "circular include must return Err; got Ok");
@@ -93,6 +95,7 @@ fn test_source_map_fragment_position() {
         "root.gmod",
         &fixtures,
         &mut Vec::new(),
+        None,
     )
     .expect("expand_includes must succeed");
 
