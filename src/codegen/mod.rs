@@ -332,8 +332,8 @@ mod tests {
     use crate::ast::span::Span;
     use crate::ast::common::Spanned;
     use crate::ast::module::{
-        CaseArm, CaseBlock, GenerateBlock, InputDecl, InterfaceBlock, MetadataBlock,
-        ModuleDefinition, OutputMapping, ValidationBlock, ValidationRule, ValidationSeverity,
+        CaseArm, GenerateBlock, InterfaceBlock, MetadataBlock,
+        ModuleDefinition, ValidationBlock, ValidationRule, ValidationSeverity,
     };
     use crate::ast::template::{InputBinding, ResourceInstance};
     use crate::resolver::context::ResolveContext;

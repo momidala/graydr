@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_assembly_groups_by_provider_region() {
         let names = vec!["a".to_string(), "b".to_string()];
-        let g = DependencyGraph::new(&names);
+        let _g = DependencyGraph::new(&names);
         let topo = vec!["a".to_string(), "b".to_string()];
         let mut provider_map = HashMap::new();
         provider_map.insert("a".to_string(), "aws".to_string());
