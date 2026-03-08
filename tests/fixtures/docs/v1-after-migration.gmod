@@ -1,0 +1,86 @@
+module "storage-migrated" {
+  metadata {
+    description = "Migrated from v1: formerly used provider block and language attribute"
+    version     = "2.0.0"
+  }
+
+  interface {
+    inputs {
+      bucket_name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      size = {
+        required  = false
+        sensitive = false
+        default   = "standard"
+      }
+    }
+    outputs {
+      bucket_url = {}
+    }
+  }
+
+  validation {
+    rule "bucket_name_not_empty" {
+      condition     = "$bucket_name != \"\""
+      error_message = "bucket_name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_s3_bucket" "$bucket_name" {
+            bucket = "$bucket_name"
+            region = "${var.region}"
+
+            tags = {
+              Size = "$size"
+            }
+          }
+        EOT
+        outputs {
+          bucket_url = "${aws_s3_bucket.storage_migrated.bucket_regional_domain_name}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_storage_account" "$bucket_name" {
+            name                     = "$bucket_name"
+            location                 = "$region"
+            account_tier             = "Standard"
+            account_replication_type = "LRS"
+          }
+        EOT
+        outputs {
+          bucket_url = "${azurerm_storage_account.storage_migrated.primary_blob_endpoint}"
+        }
+      }
+    }
+    case "size" {
+      standard {
+        code = <<-EOT
+          # standard tier configuration comment
+          locals {
+            storage_class = "STANDARD"
+          }
+        EOT
+      }
+      XL {
+        code = <<-EOT
+          # XL tier configuration comment
+          locals {
+            storage_class = "REDUCED_REDUNDANCY"
+          }
+        EOT
+      }
+    }
+  }
+}
