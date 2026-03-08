@@ -1,0 +1,102 @@
+module "database" {
+  metadata {
+    description          = "Cross-cloud managed database module"
+    version              = "1.0.0"
+    security_tier        = "high"
+    compliance_frameworks = "SOC2,PCI-DSS"
+    cost_tier            = "premium"
+    data_classification  = "confidential"
+    disaster_recovery_tier = "tier1"
+    approval_required    = true
+  }
+
+  interface {
+    inputs {
+      db_name = {
+        required  = true
+        sensitive = false
+      }
+      db_password = {
+        required  = true
+        sensitive = true
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      instance_size = {
+        required  = false
+        sensitive = false
+        default   = "db.t3.medium"
+      }
+    }
+    outputs {
+      connection_string = {}
+      endpoint          = {}
+    }
+  }
+
+  validation {
+    rule "password_not_empty" {
+      condition     = "$db_password != \"\""
+      error_message = "db_password must not be empty"
+      severity      = "error"
+    }
+    rule "valid_instance_size" {
+      condition     = "$instance_size != \"\""
+      error_message = "instance_size must be set"
+      severity      = "warning"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_db_instance" "$db_name" {
+            identifier        = "$db_name"
+            engine            = "postgres"
+            instance_class    = "$instance_size"
+            username          = "admin"
+            password          = "$db_password"
+            availability_zone = "${var.availability_zone}"
+            skip_final_snapshot = true
+
+            tags = {
+              Name = "$db_name"
+            }
+          }
+        EOT
+        outputs {
+          connection_string = "postgresql://admin@${aws_db_instance.database.endpoint}/$db_name"
+          endpoint          = "${aws_db_instance.database.endpoint}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_postgresql_server" "$db_name" {
+            name                = "$db_name"
+            location            = "$region"
+            sku_name            = "GP_Gen5_2"
+            administrator_login = "adminuser"
+            administrator_login_password = "$db_password"
+            ssl_enforcement_enabled      = true
+            version             = "11"
+          }
+
+          resource "azurerm_postgresql_database" "${db_name}_db" {
+            name                = "$db_name"
+            resource_group_name = "${azurerm_postgresql_server.database.resource_group_name}"
+            server_name         = "${azurerm_postgresql_server.database.name}"
+            charset             = "UTF8"
+            collation           = "English_United States.1252"
+          }
+        EOT
+        outputs {
+          connection_string = "postgresql://adminuser@${azurerm_postgresql_server.database.fqdn}/$db_name"
+          endpoint          = "${azurerm_postgresql_server.database.fqdn}"
+        }
+      }
+    }
+  }
+}
