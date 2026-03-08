@@ -29,25 +29,21 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_retired_blocks_new_use() {
         assert!(LifecycleState::Retired.blocks_new_use());
     }
 
     #[test]
-    #[ignore]
     fn test_deprecated_does_not_block() {
         assert!(!LifecycleState::Deprecated.blocks_new_use());
     }
 
     #[test]
-    #[ignore]
     fn test_from_str_retired() {
         assert_eq!(LifecycleState::from_str("retired"), LifecycleState::Retired);
     }
 
     #[test]
-    #[ignore]
     fn test_from_str_unknown_defaults_to_active() {
         assert_eq!(LifecycleState::from_str("unknown"), LifecycleState::Active);
     }
