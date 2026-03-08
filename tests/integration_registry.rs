@@ -2,11 +2,23 @@
 // All tests are #[ignore] — Wave 0 RED stubs; remove #[ignore] as implementation completes
 
 #[test]
-#[ignore]
 fn test_publish_command_exists() {
-    // graydr publish --module foo.gmod --registry http://localhost exits with
-    // a meaningful error (not "unknown subcommand") when registry is unreachable
-    todo!()
+    // Verify graydr publish --help is accessible (subcommand exists in CLI).
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_graydr"))
+        .args(["publish", "--help"])
+        .output()
+        .expect("failed to run graydr");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("--module"),
+        "publish --help should show --module flag; got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("--registry"),
+        "publish --help should show --registry flag; got: {}",
+        stdout
+    );
 }
 
 #[test]

@@ -27,7 +27,24 @@ impl RegistryClient {
         coord: &ModuleCoord,
         gmod_path: &std::path::Path,
     ) -> Result<(), RegistryError> {
-        todo!()
+        let token = self.config.token.as_deref()
+            .ok_or(RegistryError::AuthRequired)?;
+        let url = format!(
+            "{}/api/v1/modules/{}/{}/{}",
+            self.config.base_url, coord.org, coord.name, coord.version
+        );
+        let form = reqwest::blocking::multipart::Form::new()
+            .file("module", gmod_path)
+            .map_err(|e| RegistryError::NetworkError { message: e.to_string() })?;
+        self.http
+            .put(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .multipart(form)
+            .send()
+            .map_err(|e| RegistryError::NetworkError { message: e.to_string() })?
+            .error_for_status()
+            .map_err(|e| RegistryError::NetworkError { message: e.to_string() })?;
+        Ok(())
     }
 
     /// Fetch module content from the registry.
@@ -105,6 +122,19 @@ impl RegistryClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_publish_requires_auth_token() {
+        let coord = ModuleCoord::parse("org/name@1.0.0").unwrap();
+        let config = RegistryConfig { base_url: "http://unused".to_string(), token: None };
+        let client = RegistryClient::new(config);
+        let result = client.publish_module(&coord, std::path::Path::new("/dev/null"));
+        assert!(
+            matches!(result, Err(RegistryError::AuthRequired)),
+            "publish without token must return AuthRequired; got: {:?}",
+            result
+        );
+    }
 
     #[test]
     fn test_fetch_module_uses_cache() {
