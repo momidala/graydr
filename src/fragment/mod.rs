@@ -344,7 +344,7 @@ extra line"#;
         let fixtures = fixtures_dir();
         let code = r#"include "sample.gfrag"
 after line"#;
-        let (expanded, source_map) = expand_includes(
+        let (_expanded, source_map) = expand_includes(
             code,
             "root.gfrag",
             &fixtures,
