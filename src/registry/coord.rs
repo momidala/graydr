@@ -1,0 +1,67 @@
+use semver::Version;
+use super::RegistryError;
+
+/// A fully-qualified module coordinate of the form `org/name@version`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleCoord {
+    pub org: String,
+    pub name: String,
+    pub version: Version,
+}
+
+impl ModuleCoord {
+    /// Parse a coordinate string of the form `org/name@semver`.
+    pub fn parse(s: &str) -> Result<Self, RegistryError> {
+        todo!()
+    }
+}
+
+impl std::fmt::Display for ModuleCoord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.org, self.name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn test_valid_coordinate_parses() {
+        let coord = ModuleCoord::parse("myorg/mymodule@1.2.3").unwrap();
+        assert_eq!(coord.org, "myorg");
+        assert_eq!(coord.name, "mymodule");
+        assert_eq!(coord.version, Version::new(1, 2, 3));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_prerelease_coordinate_parses() {
+        let coord = ModuleCoord::parse("org/name@1.0.0-beta.1").unwrap();
+        assert_eq!(coord.org, "org");
+        assert_eq!(coord.name, "name");
+        assert_eq!(coord.version.pre.as_str(), "beta.1");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_missing_at_sign_is_error() {
+        let result = ModuleCoord::parse("org/name");
+        assert!(matches!(result, Err(RegistryError::MalformedCoordinate { .. })));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_missing_slash_is_error() {
+        let result = ModuleCoord::parse("orgname@1.0.0");
+        assert!(matches!(result, Err(RegistryError::MalformedCoordinate { .. })));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_bad_semver_is_error() {
+        let result = ModuleCoord::parse("org/name@not-semver");
+        assert!(matches!(result, Err(RegistryError::InvalidSemVer { .. })));
+    }
+}
