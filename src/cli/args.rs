@@ -42,3 +42,12 @@ pub enum InitKind {
         output: Option<PathBuf>,
     },
 }
+
+/// Arguments for the `publish` subcommand.
+#[derive(Parser, Debug)]
+pub struct PublishArgs {
+    #[arg(long, value_name = "FILE", help = "Path to .gmod file to publish")]
+    pub module: PathBuf,
+    #[arg(long, value_name = "URL", help = "Registry base URL (overrides GRAYDR_REGISTRY_URL)")]
+    pub registry: Option<String>,
+}

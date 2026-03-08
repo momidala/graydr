@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use graydr::cli::args::{CompileArgs, InitArgs, ValidateArgs};
+use graydr::cli::args::{CompileArgs, InitArgs, PublishArgs, ValidateArgs};
 
 #[derive(Parser)]
 #[command(name = "graydr", version, about = "IaC text preprocessor")]
@@ -13,6 +13,7 @@ enum Commands {
     Compile(CompileArgs),
     Validate(ValidateArgs),
     Init(InitArgs),
+    Publish(PublishArgs),
     Version,
 }
 
@@ -22,6 +23,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Compile(args) => graydr::cli::compile::run_compile(args)?,
         Commands::Validate(args) => graydr::cli::validate::run_validate(args),
         Commands::Init(args) => graydr::cli::init::run_init(args)?,
+        Commands::Publish(args) => graydr::cli::publish::run_publish(args)?,
         Commands::Version => {
             println!("{}", env!("CARGO_PKG_VERSION"));
         }
