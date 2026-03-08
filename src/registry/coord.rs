@@ -12,7 +12,16 @@ pub struct ModuleCoord {
 impl ModuleCoord {
     /// Parse a coordinate string of the form `org/name@semver`.
     pub fn parse(s: &str) -> Result<Self, RegistryError> {
-        todo!()
+        let (org_name, version_str) = s.split_once('@')
+            .ok_or_else(|| RegistryError::MalformedCoordinate { raw: s.to_string() })?;
+        let (org, name) = org_name.split_once('/')
+            .ok_or_else(|| RegistryError::MalformedCoordinate { raw: s.to_string() })?;
+        let version = Version::parse(version_str)
+            .map_err(|_| RegistryError::InvalidSemVer {
+                coordinate: s.to_string(),
+                version: version_str.to_string(),
+            })?;
+        Ok(ModuleCoord { org: org.to_string(), name: name.to_string(), version })
     }
 }
 
@@ -27,7 +36,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_valid_coordinate_parses() {
         let coord = ModuleCoord::parse("myorg/mymodule@1.2.3").unwrap();
         assert_eq!(coord.org, "myorg");
@@ -36,7 +44,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_prerelease_coordinate_parses() {
         let coord = ModuleCoord::parse("org/name@1.0.0-beta.1").unwrap();
         assert_eq!(coord.org, "org");
@@ -45,21 +52,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_missing_at_sign_is_error() {
         let result = ModuleCoord::parse("org/name");
         assert!(matches!(result, Err(RegistryError::MalformedCoordinate { .. })));
     }
 
     #[test]
-    #[ignore]
     fn test_missing_slash_is_error() {
         let result = ModuleCoord::parse("orgname@1.0.0");
         assert!(matches!(result, Err(RegistryError::MalformedCoordinate { .. })));
     }
 
     #[test]
-    #[ignore]
     fn test_bad_semver_is_error() {
         let result = ModuleCoord::parse("org/name@not-semver");
         assert!(matches!(result, Err(RegistryError::InvalidSemVer { .. })));
