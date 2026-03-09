@@ -27,8 +27,6 @@ impl RegistryClient {
         coord: &ModuleCoord,
         gmod_path: &std::path::Path,
     ) -> Result<(), RegistryError> {
-        let token = self.config.token.as_deref()
-            .ok_or(RegistryError::AuthRequired)?;
         let url = format!(
             "{}/api/v1/modules/{}/{}/{}",
             self.config.base_url, coord.org, coord.name, coord.version
@@ -36,14 +34,25 @@ impl RegistryClient {
         let form = reqwest::blocking::multipart::Form::new()
             .file("module", gmod_path)
             .map_err(|e| RegistryError::NetworkError { message: e.to_string() })?;
-        self.http
-            .put(&url)
-            .header("Authorization", format!("Bearer {}", token))
-            .multipart(form)
-            .send()
+
+        // Build request — add auth header only when token is configured.
+        // Do NOT error on missing token: no-auth servers are valid (CLNT-01).
+        let mut req = self.http.put(&url).multipart(form);
+        if let Some(token) = self.config.token.as_deref() {
+            req = req.header("Authorization", format!("Bearer {}", token));
+        }
+
+        req.send()
             .map_err(|e| RegistryError::NetworkError { message: e.to_string() })?
             .error_for_status()
-            .map_err(|e| RegistryError::NetworkError { message: e.to_string() })?;
+            .map_err(|e| {
+                // Map HTTP 401 to AuthRequired; everything else is a NetworkError (CLNT-02).
+                if e.status() == Some(reqwest::StatusCode::UNAUTHORIZED) {
+                    RegistryError::AuthRequired
+                } else {
+                    RegistryError::NetworkError { message: e.to_string() }
+                }
+            })?;
         Ok(())
     }
 
@@ -124,16 +133,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_publish_requires_auth_token() {
+    fn test_publish_without_token_reaches_server() {
+        // CLNT-01: publish without token must make an HTTP call, not fail early
+        let mut server = mockito::Server::new();
         let coord = ModuleCoord::parse("org/name@1.0.0").unwrap();
-        let config = RegistryConfig { base_url: "http://unused".to_string(), token: None };
+        let _m = server
+            .mock("PUT", "/api/v1/modules/org/name/1.0.0")
+            .with_status(200)
+            .create();
+        let config = RegistryConfig { base_url: server.url(), token: None };
         let client = RegistryClient::new(config);
-        let result = client.publish_module(&coord, std::path::Path::new("/dev/null"));
+        // Create a temp file with minimal content
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), b"module content").unwrap();
+        let result = client.publish_module(&coord, tmp.path());
+        assert!(result.is_ok(), "publish without token must succeed against no-auth server; got: {:?}", result);
+    }
+
+    #[test]
+    fn test_publish_401_returns_auth_required() {
+        // CLNT-02: server returning 401 must surface RegistryError::AuthRequired
+        let mut server = mockito::Server::new();
+        let coord = ModuleCoord::parse("org/name@2.0.0").unwrap();
+        let _m = server
+            .mock("PUT", "/api/v1/modules/org/name/2.0.0")
+            .with_status(401)
+            .create();
+        let config = RegistryConfig { base_url: server.url(), token: None };
+        let client = RegistryClient::new(config);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), b"module content").unwrap();
+        let result = client.publish_module(&coord, tmp.path());
         assert!(
             matches!(result, Err(RegistryError::AuthRequired)),
-            "publish without token must return AuthRequired; got: {:?}",
+            "HTTP 401 must return AuthRequired; got: {:?}",
             result
         );
+    }
+
+    #[test]
+    fn test_publish_with_token_sends_auth_header() {
+        // Token present: Authorization header must be sent
+        let mut server = mockito::Server::new();
+        let coord = ModuleCoord::parse("org/name@3.0.0").unwrap();
+        let _m = server
+            .mock("PUT", "/api/v1/modules/org/name/3.0.0")
+            .match_header("authorization", "Bearer mytoken")
+            .with_status(200)
+            .create();
+        let config = RegistryConfig { base_url: server.url(), token: Some("mytoken".to_string()) };
+        let client = RegistryClient::new(config);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), b"module content").unwrap();
+        let result = client.publish_module(&coord, tmp.path());
+        assert!(result.is_ok(), "publish with token must succeed; got: {:?}", result);
     }
 
     #[test]
