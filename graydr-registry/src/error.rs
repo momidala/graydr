@@ -18,6 +18,10 @@ pub enum AppError {
     BadRequest(String),
     #[error("internal server error")]
     Internal(#[from] StoreError),
+    #[error("module is retired and cannot be downloaded")]
+    Retired,
+    #[error("invalid lifecycle transition; state machine: active → deprecated → retired")]
+    InvalidLifecycleTransition,
 }
 
 impl IntoResponse for AppError {
@@ -32,6 +36,8 @@ impl IntoResponse for AppError {
             AppError::Internal(StoreError::AlreadyExists) => StatusCode::CONFLICT,
             AppError::Internal(StoreError::NotFound) => StatusCode::NOT_FOUND,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::Retired => StatusCode::GONE,
+            AppError::InvalidLifecycleTransition => StatusCode::UNPROCESSABLE_ENTITY,
         };
         (status, self.to_string()).into_response()
     }

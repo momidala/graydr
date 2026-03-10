@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use axum::{Router, routing::{get, put}};
+use axum::{Router, routing::{get, patch, put}};
 use tower_http::trace::TraceLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use crate::{AppState, handlers};
@@ -9,6 +9,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     // Any deviation produces silent 404 that looks like ModuleNotFound on the client.
     Router::new()
         .route("/api/v1/modules/{org}/{name}/{version}", put(handlers::publish::handle))
+        .route("/api/v1/modules/{org}/{name}/{version}/lifecycle", patch(handlers::lifecycle::handle))
         .route("/api/v1/modules/{org}/{name}/{version}/content", get(handlers::content::handle))
         .route("/api/v1/modules/{org}/{name}/{version}/meta", get(handlers::meta::handle))
         .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
