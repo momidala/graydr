@@ -33,3 +33,11 @@ pub struct ModuleMeta {
     pub lifecycle: LifecycleState,
     pub published_at: String,
 }
+
+/// JSON shape for a single entry in the GET /versions response.
+#[derive(Debug, serde::Serialize)]
+pub struct VersionEntry {
+    pub version: String,
+    pub lifecycle: LifecycleState,
+    pub published_at: String,
+}

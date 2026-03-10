@@ -5,7 +5,7 @@ pub use error::StoreError;
 pub use filesystem::FilesystemStore;
 
 use async_trait::async_trait;
-use crate::model::{ModuleCoord, ModuleMeta, LifecycleState};
+use crate::model::{ModuleCoord, ModuleMeta, LifecycleState, VersionEntry};
 
 #[async_trait]
 pub trait ModuleStore: Send + Sync {
@@ -24,4 +24,6 @@ pub trait ModuleStore: Send + Sync {
         coord: &ModuleCoord,
         new_state: LifecycleState,
     ) -> Result<(), StoreError>;
+
+    async fn list_versions(&self, org: &str, name: &str) -> Result<Vec<VersionEntry>, StoreError>;
 }

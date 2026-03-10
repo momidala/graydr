@@ -8,6 +8,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     // These URL patterns are derived from graydr/src/registry/client.rs — do NOT change them.
     // Any deviation produces silent 404 that looks like ModuleNotFound on the client.
     Router::new()
+        .route("/api/v1/modules/{org}/{name}/versions", get(handlers::versions::handle))
         .route("/api/v1/modules/{org}/{name}/{version}", put(handlers::publish::handle))
         .route("/api/v1/modules/{org}/{name}/{version}/lifecycle", patch(handlers::lifecycle::handle))
         .route("/api/v1/modules/{org}/{name}/{version}/content", get(handlers::content::handle))

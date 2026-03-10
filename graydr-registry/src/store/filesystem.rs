@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use async_trait::async_trait;
 use bytes::Bytes;
-use crate::model::{ModuleCoord, ModuleMeta, LifecycleState};
+use crate::model::{ModuleCoord, ModuleMeta, LifecycleState, VersionEntry};
 use super::{ModuleStore, StoreError};
 
 pub struct FilesystemStore {
@@ -67,6 +67,34 @@ impl ModuleStore for FilesystemStore {
         let raw = tokio::fs::read_to_string(&path).await?;
         let meta: ModuleMeta = serde_json::from_str(&raw)?;
         Ok(meta)
+    }
+
+    async fn list_versions(&self, org: &str, name: &str) -> Result<Vec<VersionEntry>, StoreError> {
+        let dir = self.data_dir.join(org).join(name);
+        if !dir.exists() {
+            return Ok(vec![]);
+        }
+        let mut entries = Vec::new();
+        let mut read_dir = tokio::fs::read_dir(&dir).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            let meta_path = entry.path().join("meta.json");
+            if meta_path.exists() {
+                let raw = tokio::fs::read_to_string(&meta_path).await?;
+                if let Ok(meta) = serde_json::from_str::<ModuleMeta>(&raw) {
+                    entries.push(VersionEntry {
+                        version: meta.version,
+                        lifecycle: meta.lifecycle,
+                        published_at: meta.published_at,
+                    });
+                }
+            }
+        }
+        entries.sort_by(|a, b| {
+            let va = semver::Version::parse(&a.version).unwrap_or(semver::Version::new(0, 0, 0));
+            let vb = semver::Version::parse(&b.version).unwrap_or(semver::Version::new(0, 0, 0));
+            va.cmp(&vb)
+        });
+        Ok(entries)
     }
 
     async fn update_lifecycle(
