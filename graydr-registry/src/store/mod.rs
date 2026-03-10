@@ -5,7 +5,7 @@ pub use error::StoreError;
 pub use filesystem::FilesystemStore;
 
 use async_trait::async_trait;
-use crate::model::{ModuleCoord, ModuleMeta};
+use crate::model::{ModuleCoord, ModuleMeta, LifecycleState};
 
 #[async_trait]
 pub trait ModuleStore: Send + Sync {
@@ -18,4 +18,10 @@ pub trait ModuleStore: Send + Sync {
 
     async fn get_content(&self, coord: &ModuleCoord) -> Result<bytes::Bytes, StoreError>;
     async fn get_meta(&self, coord: &ModuleCoord) -> Result<ModuleMeta, StoreError>;
+
+    async fn update_lifecycle(
+        &self,
+        coord: &ModuleCoord,
+        new_state: LifecycleState,
+    ) -> Result<(), StoreError>;
 }

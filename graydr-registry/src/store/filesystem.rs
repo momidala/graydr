@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use async_trait::async_trait;
 use bytes::Bytes;
-use crate::model::{ModuleCoord, ModuleMeta};
+use crate::model::{ModuleCoord, ModuleMeta, LifecycleState};
 use super::{ModuleStore, StoreError};
 
 pub struct FilesystemStore {
@@ -67,5 +67,41 @@ impl ModuleStore for FilesystemStore {
         let raw = tokio::fs::read_to_string(&path).await?;
         let meta: ModuleMeta = serde_json::from_str(&raw)?;
         Ok(meta)
+    }
+
+    async fn update_lifecycle(
+        &self,
+        coord: &ModuleCoord,
+        new_state: LifecycleState,
+    ) -> Result<(), StoreError> {
+        let dir = self.module_dir(coord);
+        let meta_path = dir.join("meta.json");
+
+        if !meta_path.exists() {
+            return Err(StoreError::NotFound);
+        }
+
+        let raw = tokio::fs::read_to_string(&meta_path).await?;
+        let mut meta: ModuleMeta = serde_json::from_str(&raw)?;
+
+        // Enforce strict state machine: active → deprecated → retired (retired is terminal)
+        let valid = matches!(
+            (&meta.lifecycle, &new_state),
+            (LifecycleState::Active, LifecycleState::Deprecated)
+            | (LifecycleState::Deprecated, LifecycleState::Retired)
+        );
+        if !valid {
+            return Err(StoreError::InvalidTransition);
+        }
+
+        meta.lifecycle = new_state;
+        let updated = serde_json::to_string(&meta)?;
+
+        // Atomic write: temp-then-rename
+        let tmp = dir.join("meta.json.tmp");
+        tokio::fs::write(&tmp, updated.as_bytes()).await?;
+        tokio::fs::rename(&tmp, &meta_path).await?;
+
+        Ok(())
     }
 }

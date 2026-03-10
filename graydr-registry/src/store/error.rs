@@ -8,4 +8,6 @@ pub enum StoreError {
     Io(#[from] std::io::Error),
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("invalid lifecycle state transition")]
+    InvalidTransition,
 }
