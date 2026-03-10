@@ -58,10 +58,56 @@ fn test_compile_with_registry_coordinate_fetches_module() {
 }
 
 #[test]
-#[ignore]
 fn test_compile_with_retired_module_errors() {
-    // graydr compile with a retired module coordinate produces hard error
-    todo!()
+    // LCL-03: fetch_module receiving 410 must surface RegistryError::RetiredModule
+    use graydr::registry::{RegistryClient, RegistryConfig, ModuleCoord};
+
+    let mut server = mockito::Server::new();
+    let _m = server
+        .mock("GET", "/api/v1/modules/retiredorg/retiredmod/1.0.0/content")
+        .with_status(410)
+        .with_body("module is retired and cannot be downloaded")
+        .create();
+
+    let coord = ModuleCoord::parse("retiredorg/retiredmod@1.0.0").unwrap();
+    // Clear cache to force network call
+    if let Some(p) = graydr::registry::cache::cache_path(&coord) {
+        let _ = std::fs::remove_file(&p);
+    }
+
+    let config = RegistryConfig { base_url: server.url(), token: None };
+    let client = RegistryClient::new(config);
+    let result = client.fetch_module(&coord);
+    assert!(
+        matches!(result, Err(graydr::registry::RegistryError::RetiredModule { .. })),
+        "HTTP 410 must return RetiredModule error; got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_fetch_retired_module_returns_error() {
+    // LCL-03 unit: fetch_module maps HTTP 410 → RegistryError::RetiredModule (not NetworkError)
+    use graydr::registry::{RegistryClient, RegistryConfig, ModuleCoord};
+
+    let mut server = mockito::Server::new();
+    let coord = ModuleCoord::parse("goneorg/gonemod@5.0.0").unwrap();
+    if let Some(p) = graydr::registry::cache::cache_path(&coord) {
+        let _ = std::fs::remove_file(&p);
+    }
+    let _m = server
+        .mock("GET", "/api/v1/modules/goneorg/gonemod/5.0.0/content")
+        .with_status(410)
+        .create();
+
+    let config = RegistryConfig { base_url: server.url(), token: None };
+    let client = RegistryClient::new(config);
+    let result = client.fetch_module(&coord);
+    assert!(
+        matches!(result, Err(graydr::registry::RegistryError::RetiredModule { .. })),
+        "HTTP 410 must map to RetiredModule; got: {:?}",
+        result
+    );
 }
 
 #[test]
