@@ -82,6 +82,10 @@ impl RegistryClient {
                     RegistryError::ModuleNotFound {
                         coordinate: coord.to_string(),
                     }
+                } else if e.status() == Some(reqwest::StatusCode::GONE) {
+                    RegistryError::RetiredModule {
+                        coordinate: coord.to_string(),
+                    }
                 } else {
                     RegistryError::NetworkError {
                         message: e.to_string(),
