@@ -276,11 +276,26 @@ Set to `true` when any of these apply:
 
 Set to `false` for all other reference modules in the community tier. In the community tier, this field is informational — graydr does not enforce approval gates. Enterprise-tier tooling reads this field to decide whether to require a human-approval step in the CI pipeline.
 
+### Complete example: relational database module metadata
+
+```hcl
+metadata {
+  description            = "Cross-cloud relational database for application data."
+  version                = "1.0.0"
+  security_tier          = "medium"
+  compliance_frameworks  = "SOC2,HIPAA"
+  cost_tier              = "premium"
+  data_classification    = "confidential"
+  disaster_recovery_tier = "tier1"
+  approval_required      = false
+}
+```
+
 ### Complete example: object storage module metadata
 
 ```hcl
 metadata {
-  description            = "Cross-cloud object storage for application data."
+  description            = "Cross-cloud object storage for application assets."
   version                = "1.0.0"
   security_tier          = "medium"
   compliance_frameworks  = "SOC2"
@@ -290,6 +305,10 @@ metadata {
   approval_required      = false
 }
 ```
+
+> **Do not ship with TODO governance fields.** The compiler does not enforce governance fields, so it is tempting to leave them as empty strings or `"TODO"`. Reference modules with unset governance fields cannot be consumed reliably by enterprise tooling. Set all required fields before publishing.
+
+For the mechanical syntax of the `metadata` block, see the [Module Authoring Guide](./module-authoring-guide.md).
 
 ---
 
