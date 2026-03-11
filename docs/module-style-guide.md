@@ -23,6 +23,7 @@
 The compiler resolves `module = "network"` in a template by looking for `network.gmod` in the include path. A mismatch causes `UnresolvedModule` at compile time — the error is hard, not a warning.
 
 ```hcl
+# excerpt
 # File: modules/object_storage/object_storage.gmod
 module "object_storage" {
   # module name matches filename stem exactly
@@ -350,6 +351,7 @@ Keep IaC code inline in the case arm when:
 ### Decision example
 
 ```hcl
+# excerpt
 # EXTRACT to fragment: AWS tagging policy appears in every AWS arm across
 # multiple modules — pure boilerplate with universally available variables.
 #
