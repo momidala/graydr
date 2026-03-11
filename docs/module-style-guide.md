@@ -382,160 +382,130 @@ aws {
 
 ## 5. Adding a New Provider Arm
 
-graydr modules are designed for extension. Adding a new cloud provider (IBM Cloud, Oracle Cloud, or any future provider) follows the same three-step pattern regardless of provider.
+Adding a new provider arm to an existing module is a mechanical three-step process: add the arm to the generate block, write the provider-specific IaC code, and map outputs. The arm identifier string must match the `provider` value in the properties file exactly. IBM Cloud uses `ibm`; Oracle Cloud uses `oci`.
 
-**Prerequisite:** The provider must use a Terraform-compatible output format. graydr emits IaC code as text — the `code` heredoc contains whatever the target IaC toolchain expects. AWS, Azure, GCP, IBM Cloud, and Oracle Cloud all use Terraform providers, so their arms contain Terraform HCL.
+> Before starting: confirm the module compiles cleanly against the three existing provider arms (aws, azure, gcp). Run `graydr validate <module>.gmod` to check structure. Adding a new arm to a module with existing errors makes debugging harder.
 
-### The three-step pattern
+### IBM Cloud walkthrough: adding an arm to object_storage
 
-1. **Add the arm identifier** to the existing `case "provider"` block in the module's `generate` block.
-2. **Write the provider-specific IaC code** in the arm's `code` heredoc.
-3. **Map each declared output** to the provider-specific resource reference in the arm's `outputs {}` block.
+This walkthrough uses `modules/object_storage/object_storage.gmod` as the example. The module starts with `aws`, `azure`, and `gcp` arms and we add `ibm`.
 
-### Worked example: adding IBM Cloud to object_storage
+**Step 1: Open the module file.**
 
-Starting from a module with `aws`, `azure`, and `gcp` arms, add IBM Cloud:
+Open `modules/object_storage/object_storage.gmod`. Locate the `generate` block and find `case "provider" { ... }`.
+
+**Step 2: Identify the output contract.**
+
+Look at the module's `interface` block — specifically the `outputs {}` section. The new arm must map every declared output. For `object_storage`, the outputs are `bucket_name` and `bucket_url`.
+
+**Step 3: Add a new arm after the existing `gcp { ... }` arm.**
+
+The arm identifier is `ibm` (must match `provider: ibm` in the properties file). Write the provider-specific IaC code using the IBM Cloud Terraform provider (`ibm_resource_instance` for Cloud Object Storage):
 
 ```hcl
-module "object_storage" {
-  metadata {
-    description            = "Cross-cloud object storage for application data."
-    version                = "1.0.0"
-    security_tier          = "medium"
-    compliance_frameworks  = "SOC2"
-    cost_tier              = "standard"
-    data_classification    = "internal"
-    disaster_recovery_tier = "tier2"
-    approval_required      = false
-  }
-
-  interface {
-    inputs {
-      bucket_name       = { required = true, sensitive = false }
-      region            = { required = true, sensitive = false }
-      resource_group_id = { required = false, sensitive = false, default = "" }
+ibm {
+  code = <<-EOT
+    resource "ibm_resource_instance" "$bucket_name" {
+      name              = "$bucket_name"
+      resource_group_id = "$resource_group_id"
+      service           = "cloud-object-storage"
+      plan              = "standard"
+      location          = "global"
     }
-    outputs {
-      bucket_name = {}
-      bucket_url  = {}
-    }
-  }
-
-  validation {
-    rule "bucket_name_not_empty" {
-      condition     = "$bucket_name != \"\""
-      error_message = "bucket_name must not be empty"
-      severity      = "error"
-    }
-  }
-
-  generate {
-    case "provider" {
-      aws {
-        code = <<-EOT
-          resource "aws_s3_bucket" "$bucket_name" {
-            bucket = "$bucket_name"
-            region = "$region"
-          }
-        EOT
-        outputs {
-          bucket_name = "$bucket_name"
-          bucket_url  = "${aws_s3_bucket.object_storage.bucket_regional_domain_name}"
-        }
-      }
-      azure {
-        code = <<-EOT
-          resource "azurerm_storage_account" "$bucket_name" {
-            name     = "$bucket_name"
-            location = "$region"
-          }
-        EOT
-        outputs {
-          bucket_name = "$bucket_name"
-          bucket_url  = "${azurerm_storage_account.object_storage.primary_blob_endpoint}"
-        }
-      }
-      gcp {
-        code = <<-EOT
-          resource "google_storage_bucket" "$bucket_name" {
-            name     = "$bucket_name"
-            location = "$region"
-          }
-        EOT
-        outputs {
-          bucket_name = "$bucket_name"
-          bucket_url  = "${google_storage_bucket.object_storage.url}"
-        }
-      }
-      ibm {
-        code = <<-EOT
-          resource "ibm_resource_instance" "$bucket_name" {
-            name              = "$bucket_name"
-            resource_group_id = "$resource_group_id"
-            service           = "cloud-object-storage"
-            plan              = "standard"
-            location          = "global"
-          }
-        EOT
-        outputs {
-          bucket_name = "$bucket_name"
-          bucket_url  = "${ibm_resource_instance.object_storage.crn}"
-        }
-      }
-    }
+  EOT
+  outputs {
+    bucket_name = "$bucket_name"
+    bucket_url  = "${ibm_resource_instance.object_storage.crn}"
   }
 }
 ```
 
-**Key points:**
+Note: `$resource_group_id` must be declared as an input in the module's `interface` block if it is not already. IBM Cloud requires a resource group; add it as an optional input with a sensible default if needed:
 
-- The arm identifier (`ibm`) must exactly match the value that `provider` resolves to at compile time. If the properties file contains `provider: ibm`, the compiler selects the `ibm` arm.
-- The IBM Cloud Object Storage Terraform resource is `ibm_resource_instance`. The `service`, `plan`, and `location` attributes are IBM-specific — they are inside the case arm, invisible to the caller.
-- Output names (`bucket_name`, `bucket_url`) match the other arms exactly. The caller uses the same output names regardless of provider.
-
-### Oracle Cloud variant (secondary example)
-
-For Oracle Cloud Infrastructure, the arm identifier is `oci` and the Terraform resource is `oci_objectstorage_bucket`:
-
-```
-oci arm identifier: "oci"
-Terraform resource: oci_objectstorage_bucket
-Required inputs: bucket_name, region, namespace (OCI-specific, add to interface)
+```hcl
+resource_group_id = { required = false, sensitive = false, default = "" }
 ```
 
-The pattern is identical to the IBM example. Only the IaC code inside `code = <<-EOT ... EOT` changes.
+**Step 4: Validate the structure.**
 
-### Verification steps after adding an arm
+```
+graydr validate modules/object_storage/object_storage.gmod
+```
 
-After adding any new arm:
+Exit code 0 confirms the new arm is syntactically valid and all outputs are mapped.
 
-1. Validate the module structure:
-   ```
-   graydr validate modules/object_storage/object_storage.gmod
-   ```
-   Exit code 0 confirms the module is structurally valid — all blocks present, interface well-formed.
+**Step 5: Test-compile against an IBM properties file.**
 
-2. Test-compile against all existing arms to confirm you did not break them:
-   ```
-   graydr compile --template examples/web-app-stack.gtpl \
-     --include-path modules \
-     --properties props/aws.yaml
-   graydr compile --template examples/web-app-stack.gtpl \
-     --include-path modules \
-     --properties props/azure.yaml
-   graydr compile --template examples/web-app-stack.gtpl \
-     --include-path modules \
-     --properties props/gcp.yaml
-   ```
+Create `ibm.yaml`:
 
-3. Test-compile against the new provider:
-   ```
-   graydr compile --template examples/web-app-stack.gtpl \
-     --include-path modules \
-     --properties props/ibm.yaml
-   ```
+```yaml
+provider: ibm
+bucket_name: my-test-bucket
+region: us-south
+resource_group_id: my-resource-group
+```
 
-**Standard:** All reference modules in the library must have arms for at least `aws`, `azure`, and `gcp`. A module with arms for only aws and azure will pass `graydr validate` but fail at compile time when `provider = "gcp"` is supplied. Always test all three canonical providers before publishing.
+Then compile:
+
+```
+graydr compile --template examples/web-app-stack.gtpl \
+  --include-path modules \
+  --properties ibm.yaml
+```
+
+Confirm the IBM arm is selected and the output is valid Terraform HCL.
+
+**Step 6: Test-compile against all three existing providers.**
+
+Confirm the new arm did not break them:
+
+```
+graydr compile --template examples/web-app-stack.gtpl \
+  --include-path modules \
+  --properties props/aws.yaml
+graydr compile --template examples/web-app-stack.gtpl \
+  --include-path modules \
+  --properties props/azure.yaml
+graydr compile --template examples/web-app-stack.gtpl \
+  --include-path modules \
+  --properties props/gcp.yaml
+```
+
+**Step 7: Submit the module.**
+
+Publish to the community registry using `graydr publish` (see the CLI Reference for publish syntax).
+
+### Oracle Cloud variant
+
+The process is identical for Oracle Cloud. The arm identifier is `oci` (matches the Terraform OCI provider convention). Oracle Cloud Object Storage uses `oci_objectstorage_bucket`.
+
+```hcl
+oci {
+  code = <<-EOT
+    resource "oci_objectstorage_bucket" "$bucket_name" {
+      compartment_id = "$compartment_id"
+      namespace      = "$oci_namespace"
+      name           = "$bucket_name"
+    }
+  EOT
+  outputs {
+    bucket_name = "$bucket_name"
+    bucket_url  = "https://objectstorage.$region.oraclecloud.com/n/$oci_namespace/b/$bucket_name"
+  }
+}
+```
+
+Note: `$compartment_id` and `$oci_namespace` must be declared as inputs in the module's interface block.
+
+### General pattern — any future provider
+
+- The arm identifier must match the value of `provider` in the properties file exactly (case-sensitive)
+- Use the provider's official Terraform provider where possible — this produces HCL output that works with `terraform init && terraform apply`
+- Always declare any provider-specific inputs (like `resource_group_id` for IBM, `compartment_id` for OCI) in the module's `interface` block so the style guide's cloud-agnostic input convention is maintained
+
+> **Check all arms after adding a new one.** `graydr validate` confirms structure but does not check case completeness — a module missing the `gcp` arm will validate successfully but raise `NoMatchingArm` when compiled with `provider: gcp`. Always test-compile against all three canonical providers (aws, azure, gcp) before publishing.
+
+For case block grammar and output reference syntax, see [Language Specification §7](./language-spec.md).
 
 ---
 
