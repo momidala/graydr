@@ -320,7 +320,7 @@ For the mechanical syntax of fragments and the `include` directive, see the [Fra
 
 ### When to extract to a fragment
 
-Extract IaC code to a `.gfrag` file when **all three** of the following are true:
+Extract to a `.gfrag` file when **all three** of the following are true:
 
 1. **The block appears in more than one module's case arm** — verbatim or near-verbatim. If only one module uses it, keep it inline.
 2. **The block is provider-specific boilerplate** — tagging policies, standard IAM role bindings, provider configuration blocks. Generic boilerplate used the same way everywhere is the primary use case.
