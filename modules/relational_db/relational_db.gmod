@@ -33,6 +33,14 @@ module "relational_db" {
         sensitive = false
         default   = ""
       }
+      vpc_id = {
+        required  = true
+        sensitive = false
+      }
+      subnet_ids = {
+        required  = true
+        sensitive = false
+      }
     }
     outputs {
       endpoint = {}
@@ -52,13 +60,19 @@ module "relational_db" {
     case "provider" {
       aws {
         code = <<-EOT
+          resource "aws_db_subnet_group" "$name" {
+            name       = "$name"
+            subnet_ids = ["$subnet_ids"]
+          }
+
           resource "aws_rds_cluster" "$name" {
-            cluster_identifier  = "$name"
-            engine              = "aurora-postgresql"
-            master_username     = "$db_username"
-            master_password     = "$db_password"
-            availability_zones  = ["$region"]
-            instance_class      = "$instance_class"
+            cluster_identifier   = "$name"
+            engine               = "aurora-postgresql"
+            master_username      = "$db_username"
+            master_password      = "$db_password"
+            availability_zones   = ["$region"]
+            instance_class       = "$instance_class"
+            db_subnet_group_name = "$name"
           }
         EOT
         outputs {
@@ -74,6 +88,9 @@ module "relational_db" {
             administrator_login    = "$db_username"
             administrator_password = "$db_password"
             sku_name               = "$instance_class"
+            delegated_subnet_id    = "$subnet_ids"
+            # private_dns_zone_id is not set here; callers that require private DNS
+            # zone integration must wire this separately in the consuming template.
           }
         EOT
         outputs {
@@ -89,6 +106,10 @@ module "relational_db" {
             database_version = "POSTGRES_15"
             settings {
               tier = "$instance_class"
+              ip_configuration {
+                private_network = "$vpc_id"
+                ipv4_enabled    = false
+              }
             }
             root_password = "$db_password"
           }
