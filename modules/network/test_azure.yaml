@@ -1,0 +1,5 @@
+provider: azure
+net:
+  name: test-network
+  region: eastus
+  cidr_block: "10.0.0.0/16"
