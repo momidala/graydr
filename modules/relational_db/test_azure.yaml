@@ -1,0 +1,7 @@
+provider: azure
+db:
+  name: test-db
+  region: eastus
+  db_username: admin
+  db_password: test-password-not-real
+  instance_class: GP_Standard_D2s_v3

@@ -1,0 +1,7 @@
+provider: gcp
+db:
+  name: test-db
+  region: us-central1
+  db_username: admin
+  db_password: test-password-not-real
+  instance_class: db-f1-micro
