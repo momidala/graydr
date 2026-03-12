@@ -1,0 +1,5 @@
+provider: aws
+reg:
+  name: test-registry
+  region: us-east-1
+  resource_group_name: ""

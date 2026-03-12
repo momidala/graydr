@@ -1,0 +1,5 @@
+provider: gcp
+reg:
+  name: test-registry
+  region: us-central1
+  resource_group_name: ""

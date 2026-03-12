@@ -1,0 +1,5 @@
+provider: azure
+reg:
+  name: testregistry
+  region: eastus
+  resource_group_name: test-rg
