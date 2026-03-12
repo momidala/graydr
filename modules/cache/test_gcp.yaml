@@ -1,0 +1,6 @@
+provider: gcp
+cache:
+  name: test-cache
+  region: us-central1
+  node_type: ""
+  resource_group_name: ""

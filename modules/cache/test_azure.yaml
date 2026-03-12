@@ -1,0 +1,6 @@
+provider: azure
+cache:
+  name: test-cache
+  region: eastus
+  node_type: ""
+  resource_group_name: test-rg
