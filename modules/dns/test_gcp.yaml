@@ -1,0 +1,5 @@
+provider: gcp
+dns:
+  name: example.com
+  region: ""
+  resource_group_name: ""

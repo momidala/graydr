@@ -1,0 +1,5 @@
+provider: azure
+dns:
+  name: example.com
+  region: ""
+  resource_group_name: test-rg
