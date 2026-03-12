@@ -1,0 +1,4 @@
+provider: aws
+storage:
+  bucket_name: test-bucket-graydr
+  region: us-east-1

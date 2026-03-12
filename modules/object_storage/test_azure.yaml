@@ -1,0 +1,4 @@
+provider: azure
+storage:
+  bucket_name: test-bucket-graydr
+  region: eastus

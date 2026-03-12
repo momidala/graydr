@@ -1,0 +1,4 @@
+provider: gcp
+storage:
+  bucket_name: test-bucket-graydr
+  region: us-central1
