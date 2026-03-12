@@ -1,0 +1,84 @@
+module "dns" {
+  metadata {
+    description            = "Cross-cloud managed DNS hosted zone provisioning Route 53 (AWS), Azure DNS (Azure), and Cloud DNS (GCP)."
+    version                = "1.0.0"
+    security_tier          = "low"
+    cost_tier              = "low"
+    data_classification    = "public"
+    disaster_recovery_tier = "tier2"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+      resource_group_name = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+    }
+    outputs {
+      zone_id     = {}
+      nameservers = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_route53_zone" "$name" {
+            name = "$name"
+          }
+        EOT
+        outputs {
+          zone_id     = "${aws_route53_zone.dns.zone_id}"
+          nameservers = "${aws_route53_zone.dns.name_servers.0}"
+        }
+        # nameservers exposes the first NS record; production templates should access all name_servers from the aws_route53_zone resource directly
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_dns_zone" "$name" {
+            name                = "$name"
+            resource_group_name = "$resource_group_name"
+          }
+        EOT
+        outputs {
+          zone_id     = "${azurerm_dns_zone.dns.id}"
+          nameservers = "${azurerm_dns_zone.dns.name_servers.0}"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_dns_managed_zone" "$name" {
+            name     = "$name"
+            dns_name = "$name."
+            # dns_name requires a trailing dot per GCP Cloud DNS requirements
+          }
+        EOT
+        outputs {
+          zone_id     = "${google_dns_managed_zone.dns.id}"
+          nameservers = "${google_dns_managed_zone.dns.name_servers.0}"
+        }
+      }
+    }
+  }
+}
