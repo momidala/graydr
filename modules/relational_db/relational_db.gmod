@@ -1,0 +1,107 @@
+module "relational_db" {
+  metadata {
+    description            = "Cross-cloud managed relational database provisioning Aurora PostgreSQL, Azure DB for PostgreSQL, and Cloud SQL."
+    version                = "1.0.0"
+    security_tier          = "medium"
+    compliance_frameworks  = "SOC2,HIPAA"
+    cost_tier              = "premium"
+    data_classification    = "confidential"
+    disaster_recovery_tier = "tier1"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      db_username = {
+        required  = true
+        sensitive = false
+      }
+      db_password = {
+        required  = true
+        sensitive = true
+      }
+      instance_class = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+    }
+    outputs {
+      endpoint = {}
+      port     = {}
+    }
+  }
+
+  validation {
+    rule "db_password_required" {
+      condition     = "$db_password != \"\""
+      error_message = "db_password must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_rds_cluster" "$name" {
+            cluster_identifier  = "$name"
+            engine              = "aurora-postgresql"
+            master_username     = "$db_username"
+            master_password     = "$db_password"
+            availability_zones  = ["$region"]
+            instance_class      = "$instance_class"
+          }
+        EOT
+        outputs {
+          endpoint = "${aws_rds_cluster.relational_db.endpoint}"
+          port     = "${aws_rds_cluster.relational_db.port}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_postgresql_flexible_server" "$name" {
+            name                   = "$name"
+            location               = "$region"
+            administrator_login    = "$db_username"
+            administrator_password = "$db_password"
+            sku_name               = "$instance_class"
+          }
+        EOT
+        outputs {
+          endpoint = "${azurerm_postgresql_flexible_server.relational_db.fqdn}"
+          port     = "5432"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_sql_database_instance" "$name" {
+            name             = "$name"
+            region           = "$region"
+            database_version = "POSTGRES_15"
+            settings {
+              tier = "$instance_class"
+            }
+            root_password = "$db_password"
+          }
+          resource "google_sql_user" "db_admin" {
+            instance = "$name"
+            name     = "$db_username"
+          }
+        EOT
+        outputs {
+          endpoint = "${google_sql_database_instance.relational_db.connection_name}"
+          port     = "5432"
+        }
+      }
+    }
+  }
+}
