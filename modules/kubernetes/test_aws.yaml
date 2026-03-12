@@ -1,0 +1,8 @@
+provider: aws
+k8s:
+  name: test-cluster
+  region: us-east-1
+  vpc_id: vpc-12345678
+  subnet_ids: subnet-12345678
+  instance_class: t3.medium
+  resource_group_name: ""

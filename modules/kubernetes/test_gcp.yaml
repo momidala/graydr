@@ -1,0 +1,8 @@
+provider: gcp
+k8s:
+  name: test-cluster
+  region: us-central1
+  vpc_id: test-network
+  subnet_ids: test-subnet
+  instance_class: e2-medium
+  resource_group_name: ""
