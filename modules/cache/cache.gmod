@@ -1,0 +1,94 @@
+module "cache" {
+  metadata {
+    description            = "Cross-cloud managed Redis cache for application session and data caching."
+    version                = "1.0.0"
+    security_tier          = "medium"
+    cost_tier              = "standard"
+    data_classification    = "internal"
+    disaster_recovery_tier = "tier2"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      node_type = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+      resource_group_name = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+    }
+    outputs {
+      endpoint = {}
+      port     = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_elasticache_replication_group" "$name" {
+            replication_group_id = "$name"
+            description          = "$name"
+            node_type            = "$node_type"
+            num_cache_clusters   = 1
+          }
+        EOT
+        outputs {
+          endpoint = "${aws_elasticache_replication_group.cache.primary_endpoint_address}"
+          port     = "${aws_elasticache_replication_group.cache.port}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_redis_cache" "$name" {
+            name                = "$name"
+            location            = "$region"
+            resource_group_name = "$resource_group_name"
+            capacity            = 1
+            family              = "C"
+            sku_name            = "Standard"
+          }
+        EOT
+        outputs {
+          endpoint = "${azurerm_redis_cache.cache.hostname}"
+          port     = "6380"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_redis_instance" "$name" {
+            name           = "$name"
+            region         = "$region"
+            memory_size_gb = 1
+          }
+        EOT
+        outputs {
+          endpoint = "${google_redis_instance.cache.host}"
+          port     = "6379"
+        }
+      }
+    }
+  }
+}
