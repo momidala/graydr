@@ -1,0 +1,80 @@
+module "container_registry" {
+  metadata {
+    description            = "Cross-cloud container image registry provisioning ECR (AWS), ACR (Azure), and Artifact Registry (GCP)."
+    version                = "1.0.0"
+    security_tier          = "medium"
+    cost_tier              = "standard"
+    data_classification    = "internal"
+    disaster_recovery_tier = "tier2"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      resource_group_name = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+    }
+    outputs {
+      registry_url = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_ecr_repository" "$name" {
+            name = "$name"
+          }
+        EOT
+        outputs {
+          registry_url = "${aws_ecr_repository.container_registry.repository_url}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_container_registry" "$name" {
+            name                = "$name"
+            location            = "$region"
+            resource_group_name = "$resource_group_name"
+            sku                 = "Basic"
+          }
+        EOT
+        outputs {
+          registry_url = "${azurerm_container_registry.container_registry.login_server}"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_artifact_registry_repository" "$name" {
+            location      = "$region"
+            repository_id = "$name"
+            format        = "DOCKER"
+          }
+        EOT
+        outputs {
+          registry_url = "$region-docker.pkg.dev/$name"
+        }
+      }
+    }
+  }
+}
