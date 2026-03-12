@@ -5,3 +5,5 @@ db:
   db_username: admin
   db_password: test-password-not-real
   instance_class: db.t3.medium
+  vpc_id: vpc-12345678
+  subnet_ids: subnet-12345678

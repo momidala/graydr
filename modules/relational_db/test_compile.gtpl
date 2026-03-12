@@ -12,6 +12,8 @@ template "test_relational_db" {
       db_username    = {}
       db_password    = {}
       instance_class = {}
+      vpc_id         = {}
+      subnet_ids     = {}
     }
   }
 
@@ -23,6 +25,8 @@ template "test_relational_db" {
       db_username    = "$db.db_username"
       db_password    = "$db.db_password"
       instance_class = "$db.instance_class"
+      vpc_id         = "$db.vpc_id"
+      subnet_ids     = "$db.subnet_ids"
     }
   }
 

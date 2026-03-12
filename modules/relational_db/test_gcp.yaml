@@ -5,3 +5,5 @@ db:
   db_username: admin
   db_password: test-password-not-real
   instance_class: db-f1-micro
+  vpc_id: projects/test-project/global/networks/test-network
+  subnet_ids: projects/test-project/regions/us-central1/subnetworks/db-subnet

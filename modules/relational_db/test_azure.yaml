@@ -5,3 +5,5 @@ db:
   db_username: admin
   db_password: test-password-not-real
   instance_class: GP_Standard_D2s_v3
+  vpc_id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test-rg/providers/Microsoft.Network/virtualNetworks/test-vnet
+  subnet_ids: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test-rg/providers/Microsoft.Network/virtualNetworks/test-vnet/subnets/db-subnet
