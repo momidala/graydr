@@ -1,0 +1,128 @@
+module "kubernetes" {
+  metadata {
+    description            = "Cross-cloud managed Kubernetes cluster provisioning EKS (AWS), AKS (Azure), and GKE (GCP)."
+    version                = "1.0.0"
+    security_tier          = "high"
+    cost_tier              = "premium"
+    data_classification    = "internal"
+    disaster_recovery_tier = "tier1"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      vpc_id = {
+        required  = true
+        sensitive = false
+      }
+      subnet_ids = {
+        required  = true
+        sensitive = false
+      }
+      instance_class = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+      resource_group_name = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+    }
+    outputs {
+      cluster_endpoint   = {}
+      kubeconfig_command = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_iam_role" "eks_role" {
+            name               = "$name-role"
+            assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"eks.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+          }
+
+          resource "aws_iam_role_policy_attachment" "eks_policy" {
+            role       = "${aws_iam_role.eks_role.name}"
+            policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+          }
+
+          resource "aws_eks_cluster" "$name" {
+            name     = "$name"
+            role_arn = "${aws_iam_role.eks_role.arn}"
+
+            vpc_config {
+              subnet_ids = ["$subnet_ids"]
+            }
+          }
+        EOT
+        outputs {
+          cluster_endpoint   = "${aws_eks_cluster.kubernetes.endpoint}"
+          kubeconfig_command = "aws eks update-kubeconfig --region $region --name $name"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_kubernetes_cluster" "$name" {
+            name                = "$name"
+            location            = "$region"
+            resource_group_name = "$resource_group_name"
+            dns_prefix          = "$name"
+
+            default_node_pool {
+              name       = "default"
+              node_count = 1
+              vm_size    = "$instance_class"
+            }
+
+            identity {
+              type = "SystemAssigned"
+            }
+          }
+        EOT
+        outputs {
+          cluster_endpoint   = "${azurerm_kubernetes_cluster.kubernetes.kube_config.0.host}"
+          kubeconfig_command = "az aks get-credentials --resource-group $resource_group_name --name $name"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_container_cluster" "$name" {
+            name     = "$name"
+            location = "$region"
+            network  = "$vpc_id"
+
+            initial_node_count = 1
+
+            node_config {
+              machine_type = "$instance_class"
+            }
+          }
+        EOT
+        outputs {
+          cluster_endpoint   = "${google_container_cluster.kubernetes.endpoint}"
+          kubeconfig_command = "gcloud container clusters get-credentials $name --region $region"
+        }
+      }
+    }
+  }
+}
