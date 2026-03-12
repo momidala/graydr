@@ -511,6 +511,90 @@ For case block grammar and output reference syntax, see [Language Specification 
 
 ---
 
+## 6. Complete Reference Example
+
+The following is a minimal but complete module that applies every convention in this guide. It is validated by `scripts/validate-style-guide-snippets.sh` as part of the phase gate.
+
+- Module identifier matches filename stem (`example_store` → `example_store.gmod`)
+- All inputs are cloud-agnostic (`name`, `region` — no provider prefixes)
+- All outputs describe values, not resources (`url` not `s3_url`)
+- Full governance metadata with all required fields set
+- Validation rule error message does not echo the input value
+- Three canonical provider arms (aws, azure, gcp) each mapping all declared outputs
+
+```hcl
+module "example_store" {
+  metadata {
+    description            = "Minimal reference module for style guide illustration."
+    version                = "1.0.0"
+    security_tier          = "medium"
+    compliance_frameworks  = "SOC2"
+    cost_tier              = "standard"
+    data_classification    = "internal"
+    disaster_recovery_tier = "tier2"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name   = { required = true, sensitive = false }
+      region = { required = true, sensitive = false }
+    }
+    outputs {
+      url = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_s3_bucket" "$name" {
+            bucket = "$name"
+            region = "$region"
+          }
+        EOT
+        outputs {
+          url = "${aws_s3_bucket.example_store.bucket_regional_domain_name}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_storage_account" "$name" {
+            name     = "$name"
+            location = "$region"
+          }
+        EOT
+        outputs {
+          url = "${azurerm_storage_account.example_store.primary_blob_endpoint}"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_storage_bucket" "$name" {
+            name     = "$name"
+            location = "$region"
+          }
+        EOT
+        outputs {
+          url = "${google_storage_bucket.example_store.url}"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
 *For mechanical syntax details, see:*
 - *[Module Authoring Guide](./module-authoring-guide.md) — interface, validation, generate/case blocks*
 - *[Template Authoring Guide](./template-authoring-guide.md) — parameter groups, resource wiring, output references*
