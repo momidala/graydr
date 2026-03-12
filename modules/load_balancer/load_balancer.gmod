@@ -1,0 +1,145 @@
+module "load_balancer" {
+  metadata {
+    description            = "Cross-cloud HTTP/HTTPS application load balancer provisioning ALB (AWS), Application Gateway (Azure), and Cloud Load Balancing (GCP)."
+    version                = "1.0.0"
+    security_tier          = "high"
+    cost_tier              = "standard"
+    data_classification    = "public"
+    disaster_recovery_tier = "tier1"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      resource_group_name = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+    }
+    outputs {
+      dns_name = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_lb" "$name" {
+            name               = "$name"
+            load_balancer_type = "application"
+            internal           = false
+          }
+        EOT
+        outputs {
+          dns_name = "${aws_lb.load_balancer.dns_name}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_application_gateway" "$name" {
+            name                = "$name"
+            location            = "$region"
+            resource_group_name = "$resource_group_name"
+
+            sku {
+              name     = "Standard_v2"
+              tier     = "Standard_v2"
+              capacity = 1
+            }
+
+            gateway_ip_configuration "main" {
+              subnet_id = ""
+              # Production: wire to subnet_id from network module output
+            }
+
+            frontend_port "http" {
+              port = 80
+            }
+
+            frontend_ip_configuration "main" {
+              name = "$name-fip"
+            }
+
+            backend_address_pool "main" {
+              name = "$name-bap"
+            }
+
+            backend_http_settings "main" {
+              name                  = "$name-bhs"
+              cookie_based_affinity = "Disabled"
+              port                  = 80
+              protocol              = "Http"
+              request_timeout       = 60
+            }
+
+            http_listener "main" {
+              name                           = "$name-listener"
+              frontend_ip_configuration_name = "$name-fip"
+              frontend_port_name             = "http"
+              protocol                       = "Http"
+            }
+
+            request_routing_rule "main" {
+              name                       = "$name-rule"
+              rule_type                  = "Basic"
+              http_listener_name         = "$name-listener"
+              backend_address_pool_name  = "$name-bap"
+              backend_http_settings_name = "$name-bhs"
+              priority                   = 10
+            }
+          }
+        EOT
+        outputs {
+          dns_name = "${azurerm_application_gateway.load_balancer.frontend_ip_configuration.0.public_ip_address}"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_compute_backend_service" "lb" {
+            name                  = "$name"
+            load_balancing_scheme = "EXTERNAL"
+            protocol              = "HTTP"
+          }
+
+          resource "google_compute_url_map" "lb" {
+            name            = "$name"
+            default_service = "${google_compute_backend_service.lb.id}"
+          }
+
+          resource "google_compute_target_http_proxy" "lb" {
+            name    = "$name"
+            url_map = "${google_compute_url_map.lb.id}"
+          }
+
+          resource "google_compute_global_forwarding_rule" "lb" {
+            name                  = "$name"
+            load_balancing_scheme = "EXTERNAL"
+            port_range            = "80"
+            target                = "${google_compute_target_http_proxy.lb.id}"
+          }
+        EOT
+        outputs {
+          dns_name = "${google_compute_global_forwarding_rule.load_balancer.ip_address}"
+        }
+      }
+    }
+  }
+}
