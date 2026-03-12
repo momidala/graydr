@@ -1,0 +1,5 @@
+provider: aws
+lb:
+  name: test-lb
+  region: us-east-1
+  resource_group_name: ""

@@ -1,0 +1,5 @@
+provider: azure
+lb:
+  name: test-lb
+  region: eastus
+  resource_group_name: test-rg
