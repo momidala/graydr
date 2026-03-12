@@ -1,0 +1,78 @@
+module "object_storage" {
+  metadata {
+    description            = "Cross-cloud object storage for application assets."
+    version                = "1.0.0"
+    security_tier          = "medium"
+    compliance_frameworks  = "SOC2"
+    cost_tier              = "standard"
+    data_classification    = "internal"
+    disaster_recovery_tier = "tier2"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      bucket_name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+    }
+    outputs {
+      bucket_name = {}
+      bucket_url  = {}
+    }
+  }
+
+  validation {
+    rule "bucket_name_required" {
+      condition     = "$bucket_name != \"\""
+      error_message = "bucket_name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_s3_bucket" "$bucket_name" {
+            bucket = "$bucket_name"
+            region = "$region"
+          }
+        EOT
+        outputs {
+          bucket_name = "$bucket_name"
+          bucket_url  = "${aws_s3_bucket.object_storage.bucket_regional_domain_name}"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource "azurerm_storage_account" "$bucket_name" {
+            name     = "$bucket_name"
+            location = "$region"
+          }
+        EOT
+        outputs {
+          bucket_name = "$bucket_name"
+          bucket_url  = "${azurerm_storage_account.object_storage.primary_blob_endpoint}"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_storage_bucket" "$bucket_name" {
+            name     = "$bucket_name"
+            location = "$region"
+          }
+        EOT
+        outputs {
+          bucket_name = "$bucket_name"
+          bucket_url  = "${google_storage_bucket.object_storage.url}"
+        }
+      }
+    }
+  }
+}
