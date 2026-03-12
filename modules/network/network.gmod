@@ -1,0 +1,111 @@
+module "network" {
+  metadata {
+    description            = "Cross-cloud network layer providing VPC, subnet, and private endpoint infrastructure."
+    version                = "1.0.0"
+    security_tier          = "high"
+    cost_tier              = "standard"
+    data_classification    = "internal"
+    disaster_recovery_tier = "tier1"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name       = { required = true,  sensitive = false }
+      region     = { required = true,  sensitive = false }
+      cidr_block = { required = true,  sensitive = false }
+    }
+    outputs {
+      vpc_id            = {}
+      subnet_ids        = {}
+      private_endpoints = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          resource "aws_vpc" "$name" {
+            cidr_block = "$cidr_block"
+
+            tags = {
+              Name = "$name"
+            }
+          }
+
+          # Single-subnet minimal implementation.
+          # Production deployments should expand to one subnet per availability zone.
+          resource "aws_subnet" "$name" {
+            cidr_block        = "$cidr_block"
+            availability_zone = "$region"
+
+            tags = {
+              Name = "$name"
+            }
+          }
+        EOT
+        outputs {
+          vpc_id            = "${aws_vpc.main_network.id}"
+          subnet_ids        = "${aws_subnet.main_network.id}"
+          # private endpoints are wired by the consuming template as separate resources
+          private_endpoints = ""
+        }
+      }
+
+      azure {
+        code = <<-EOT
+          resource "azurerm_virtual_network" "$name" {
+            name          = "$name"
+            location      = "$region"
+            address_space = ["$cidr_block"]
+          }
+
+          # Single-subnet minimal implementation.
+          # Production deployments should expand to multiple subnets.
+          resource "azurerm_subnet" "$name" {
+            name             = "$name"
+            address_prefixes = ["$cidr_block"]
+          }
+        EOT
+        outputs {
+          vpc_id            = "${azurerm_virtual_network.main_network.id}"
+          subnet_ids        = "${azurerm_subnet.main_network.id}"
+          # private endpoints are wired by the consuming template as separate resources
+          private_endpoints = ""
+        }
+      }
+
+      gcp {
+        code = <<-EOT
+          resource "google_compute_network" "$name" {
+            name                    = "$name"
+            auto_create_subnetworks = false
+          }
+
+          # Single-subnet minimal implementation.
+          # Production deployments should expand to multiple subnets across regions.
+          resource "google_compute_subnetwork" "$name" {
+            name          = "$name"
+            region        = "$region"
+            ip_cidr_range = "$cidr_block"
+          }
+        EOT
+        outputs {
+          vpc_id            = "${google_compute_network.main_network.id}"
+          subnet_ids        = "${google_compute_subnetwork.main_network.id}"
+          # private endpoints are wired by the consuming template as separate resources
+          private_endpoints = ""
+        }
+      }
+    }
+  }
+}
