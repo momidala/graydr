@@ -34,28 +34,30 @@ module "network" {
     case "provider" {
       aws {
         code = <<-EOT
-          resource "aws_vpc" "$name" {
-            cidr_block = "$cidr_block"
+          Resources:
+            NetworkVpc:
+              Type: AWS::EC2::VPC
+              Properties:
+                CidrBlock: $cidr_block
+                Tags:
+                  - Key: Name
+                    Value: $name
 
-            tags = {
-              Name = "$name"
-            }
-          }
-
-          # Single-subnet minimal implementation.
-          # Production deployments should expand to one subnet per availability zone.
-          resource "aws_subnet" "$name" {
-            cidr_block        = "$cidr_block"
-            availability_zone = "$region"
-
-            tags = {
-              Name = "$name"
-            }
-          }
+            # Single-subnet minimal implementation.
+            # Production deployments should expand to one subnet per availability zone.
+            NetworkSubnet:
+              Type: AWS::EC2::Subnet
+              Properties:
+                VpcId: !Ref NetworkVpc
+                CidrBlock: $cidr_block
+                AvailabilityZone: $region
+                Tags:
+                  - Key: Name
+                    Value: $name
         EOT
         outputs {
-          vpc_id            = "${aws_vpc.main_network.id}"
-          subnet_ids        = "${aws_subnet.main_network.id}"
+          vpc_id            = "!Ref NetworkVpc"
+          subnet_ids        = "!Ref NetworkSubnet"
           # private endpoints are wired by the consuming template as separate resources
           private_endpoints = ""
         }

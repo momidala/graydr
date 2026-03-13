@@ -60,24 +60,26 @@ module "relational_db" {
     case "provider" {
       aws {
         code = <<-EOT
-          resource "aws_db_subnet_group" "$name" {
-            name       = "$name"
-            subnet_ids = ["$subnet_ids"]
-          }
+          Resources:
+            RelationalDbSubnetGroup:
+              Type: AWS::RDS::DBSubnetGroup
+              Properties:
+                DBSubnetGroupDescription: $name subnet group
+                SubnetIds:
+                  - $subnet_ids
+                  # Production: provide multiple subnet IDs for multi-AZ deployment
 
-          resource "aws_rds_cluster" "$name" {
-            cluster_identifier   = "$name"
-            engine               = "aurora-postgresql"
-            master_username      = "$db_username"
-            master_password      = "$db_password"
-            availability_zones   = ["$region"]
-            instance_class       = "$instance_class"
-            db_subnet_group_name = "$name"
-          }
+            RelationalDbCluster:
+              Type: AWS::RDS::DBCluster
+              Properties:
+                Engine: aurora-postgresql
+                MasterUsername: $db_username
+                MasterUserPassword: $db_password
+                DBSubnetGroupName: !Ref RelationalDbSubnetGroup
         EOT
         outputs {
-          endpoint = "${aws_rds_cluster.relational_db.endpoint}"
-          port     = "${aws_rds_cluster.relational_db.port}"
+          endpoint = "!GetAtt RelationalDbCluster.Endpoint.Address"
+          port     = "!GetAtt RelationalDbCluster.Endpoint.Port"
         }
       }
       azure {

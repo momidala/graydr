@@ -39,14 +39,15 @@ module "object_storage" {
     case "provider" {
       aws {
         code = <<-EOT
-          resource "aws_s3_bucket" "$bucket_name" {
-            bucket = "$bucket_name"
-            region = "$region"
-          }
+          Resources:
+            ObjectStorageBucket:
+              Type: AWS::S3::Bucket
+              Properties:
+                BucketName: $bucket_name
         EOT
         outputs {
           bucket_name = "$bucket_name"
-          bucket_url  = "${aws_s3_bucket.object_storage.bucket_regional_domain_name}"
+          bucket_url  = "!GetAtt ObjectStorageBucket.RegionalDomainName"
         }
       }
       azure {
