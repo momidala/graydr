@@ -54,15 +54,19 @@ module "container_registry" {
       }
       azure {
         code = <<-EOT
-          resource "azurerm_container_registry" "$name" {
-            name                = "$name"
-            location            = "$region"
-            resource_group_name = "$resource_group_name"
-            sku                 = "Basic"
+          resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+            name: '$name'
+            location: '$region'
+            sku: {
+              name: 'Basic'
+            }
+            properties: {
+              adminUserEnabled: false
+            }
           }
         EOT
         outputs {
-          registry_url = "${azurerm_container_registry.container_registry.login_server}"
+          registry_url = "containerRegistry.properties.loginServer"
         }
       }
       gcp {

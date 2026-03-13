@@ -88,25 +88,27 @@ module "kubernetes" {
       }
       azure {
         code = <<-EOT
-          resource "azurerm_kubernetes_cluster" "$name" {
-            name                = "$name"
-            location            = "$region"
-            resource_group_name = "$resource_group_name"
-            dns_prefix          = "$name"
-
-            default_node_pool {
-              name       = "default"
-              node_count = 1
-              vm_size    = "$instance_class"
+          resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
+            name: '$name'
+            location: '$region'
+            identity: {
+              type: 'SystemAssigned'
             }
-
-            identity {
-              type = "SystemAssigned"
+            properties: {
+              dnsPrefix: '$name'
+              agentPoolProfiles: [
+                {
+                  name: 'default'
+                  count: 1
+                  vmSize: '$instance_class'
+                  mode: 'System'
+                }
+              ]
             }
           }
         EOT
         outputs {
-          cluster_endpoint   = "${azurerm_kubernetes_cluster.kubernetes.kube_config.0.host}"
+          cluster_endpoint   = "aksCluster.properties.fqdn"
           kubeconfig_command = "az aks get-credentials --resource-group $resource_group_name --name $name"
         }
       }
