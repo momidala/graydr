@@ -65,22 +65,28 @@ module "network" {
 
       azure {
         code = <<-EOT
-          resource "azurerm_virtual_network" "$name" {
-            name          = "$name"
-            location      = "$region"
-            address_space = ["$cidr_block"]
-          }
+          resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+            name: '$name'
+            location: '$region'
+            properties: {
+              addressSpace: {
+                addressPrefixes: ['$cidr_block']
+              }
+            }
 
-          # Single-subnet minimal implementation.
-          # Production deployments should expand to multiple subnets.
-          resource "azurerm_subnet" "$name" {
-            name             = "$name"
-            address_prefixes = ["$cidr_block"]
+            # Single-subnet minimal implementation.
+            # Production deployments should expand to multiple subnets.
+            resource subnet 'subnets' = {
+              name: '$name-subnet'
+              properties: {
+                addressPrefix: '$cidr_block'
+              }
+            }
           }
         EOT
         outputs {
-          vpc_id            = "${azurerm_virtual_network.main_network.id}"
-          subnet_ids        = "${azurerm_subnet.main_network.id}"
+          vpc_id            = "vnet.id"
+          subnet_ids        = "vnet::subnet.id"
           # private endpoints are wired by the consuming template as separate resources
           private_endpoints = ""
         }

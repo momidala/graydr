@@ -52,14 +52,23 @@ module "object_storage" {
       }
       azure {
         code = <<-EOT
-          resource "azurerm_storage_account" "$bucket_name" {
-            name     = "$bucket_name"
-            location = "$region"
+          resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+            name: '$bucket_name'
+            location: '$region'
+            kind: 'StorageV2'
+            sku: {
+              name: 'Standard_LRS'
+            }
+          }
+
+          resource blobContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+            name: '$bucket_name/default/$bucket_name'
+            dependsOn: [storageAccount]
           }
         EOT
         outputs {
           bucket_name = "$bucket_name"
-          bucket_url  = "${azurerm_storage_account.object_storage.primary_blob_endpoint}"
+          bucket_url  = "storageAccount.properties.primaryEndpoints.blob"
         }
       }
       gcp {

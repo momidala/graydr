@@ -84,19 +84,29 @@ module "relational_db" {
       }
       azure {
         code = <<-EOT
-          resource "azurerm_postgresql_flexible_server" "$name" {
-            name                   = "$name"
-            location               = "$region"
-            administrator_login    = "$db_username"
-            administrator_password = "$db_password"
-            sku_name               = "$instance_class"
-            delegated_subnet_id    = "$subnet_ids"
-            # private_dns_zone_id is not set here; callers that require private DNS
-            # zone integration must wire this separately in the consuming template.
+          resource relationalDbServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
+            name: '$name'
+            location: '$region'
+            sku: {
+              name: '$instance_class'
+              tier: 'GeneralPurpose'
+            }
+            properties: {
+              administratorLogin: '$db_username'
+              administratorLoginPassword: '$db_password'
+              storage: {
+                storageSizeGB: 32
+              }
+              version: '15'
+              network: {
+                delegatedSubnetResourceId: '$subnet_ids'
+                # Production: wire private_dns_zone_id from a Microsoft.Network/privateDnsZones resource
+              }
+            }
           }
         EOT
         outputs {
-          endpoint = "${azurerm_postgresql_flexible_server.relational_db.fqdn}"
+          endpoint = "relationalDbServer.properties.fullyQualifiedDomainName"
           port     = "5432"
         }
       }
