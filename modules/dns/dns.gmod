@@ -58,14 +58,14 @@ module "dns" {
       }
       azure {
         code = <<-EOT
-          resource "azurerm_dns_zone" "$name" {
-            name                = "$name"
-            resource_group_name = "$resource_group_name"
+          resource dnsZone 'Microsoft.Network/dnsZones@2018-05-01' = {
+            name: '$name'
+            location: 'global'
           }
         EOT
         outputs {
-          zone_id     = "${azurerm_dns_zone.dns.id}"
-          nameservers = "${azurerm_dns_zone.dns.name_servers.0}"
+          zone_id     = "dnsZone.id"
+          nameservers = "dnsZone.properties.nameServers[0]"
         }
       }
       gcp {

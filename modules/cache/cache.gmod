@@ -63,17 +63,21 @@ module "cache" {
       }
       azure {
         code = <<-EOT
-          resource "azurerm_redis_cache" "$name" {
-            name                = "$name"
-            location            = "$region"
-            resource_group_name = "$resource_group_name"
-            capacity            = 1
-            family              = "C"
-            sku_name            = "Standard"
+          resource redisCache 'Microsoft.Cache/redis@2023-04-01' = {
+            name: '$name'
+            location: '$region'
+            properties: {
+              sku: {
+                capacity: 1
+                family: 'C'
+                name: 'Standard'
+              }
+              enableNonSslPort: false
+            }
           }
         EOT
         outputs {
-          endpoint = "${azurerm_redis_cache.cache.hostname}"
+          endpoint = "redisCache.properties.hostName"
           port     = "6380"
         }
       }

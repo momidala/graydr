@@ -59,61 +59,111 @@ module "load_balancer" {
       }
       azure {
         code = <<-EOT
-          resource "azurerm_application_gateway" "$name" {
-            name                = "$name"
-            location            = "$region"
-            resource_group_name = "$resource_group_name"
-
-            sku {
-              name     = "Standard_v2"
-              tier     = "Standard_v2"
-              capacity = 1
+          resource publicIp 'Microsoft.Network/publicIPAddresses@2023-11-01' = {
+            name: '$name-pip'
+            location: '$region'
+            sku: {
+              name: 'Standard'
             }
-
-            gateway_ip_configuration "main" {
-              subnet_id = ""
-              # Production: wire to subnet_id from network module output
+            properties: {
+              publicIPAllocationMethod: 'Static'
+              dnsSettings: {
+                domainNameLabel: '$name'
+              }
             }
+          }
 
-            frontend_port "http" {
-              port = 80
-            }
-
-            frontend_ip_configuration "main" {
-              name = "$name-fip"
-            }
-
-            backend_address_pool "main" {
-              name = "$name-bap"
-            }
-
-            backend_http_settings "main" {
-              name                  = "$name-bhs"
-              cookie_based_affinity = "Disabled"
-              port                  = 80
-              protocol              = "Http"
-              request_timeout       = 60
-            }
-
-            http_listener "main" {
-              name                           = "$name-listener"
-              frontend_ip_configuration_name = "$name-fip"
-              frontend_port_name             = "http"
-              protocol                       = "Http"
-            }
-
-            request_routing_rule "main" {
-              name                       = "$name-rule"
-              rule_type                  = "Basic"
-              http_listener_name         = "$name-listener"
-              backend_address_pool_name  = "$name-bap"
-              backend_http_settings_name = "$name-bhs"
-              priority                   = 10
+          resource appGateway 'Microsoft.Network/applicationGateways@2023-11-01' = {
+            name: '$name'
+            location: '$region'
+            properties: {
+              sku: {
+                name: 'Standard_v2'
+                tier: 'Standard_v2'
+                capacity: 1
+              }
+              gatewayIPConfigurations: [
+                {
+                  name: 'main'
+                  properties: {
+                    subnet: {
+                      id: ''
+                      // Production: wire from network module subnet output
+                    }
+                  }
+                }
+              ]
+              frontendIPConfigurations: [
+                {
+                  name: 'main'
+                  properties: {
+                    publicIPAddress: {
+                      id: publicIp.id
+                    }
+                  }
+                }
+              ]
+              frontendPorts: [
+                {
+                  name: 'http'
+                  properties: {
+                    port: 80
+                  }
+                }
+              ]
+              backendAddressPools: [
+                {
+                  name: '$name-bap'
+                }
+              ]
+              backendHttpSettingsCollection: [
+                {
+                  name: '$name-bhs'
+                  properties: {
+                    port: 80
+                    protocol: 'Http'
+                    cookieBasedAffinity: 'Disabled'
+                    requestTimeout: 60
+                  }
+                }
+              ]
+              httpListeners: [
+                {
+                  name: '$name-listener'
+                  properties: {
+                    frontendIPConfiguration: {
+                      id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', '$name', 'main')
+                    }
+                    frontendPort: {
+                      id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', '$name', 'http')
+                    }
+                    protocol: 'Http'
+                  }
+                }
+              ]
+              requestRoutingRules: [
+                {
+                  name: '$name-rule'
+                  properties: {
+                    ruleType: 'Basic'
+                    priority: 10
+                    httpListener: {
+                      id: resourceId('Microsoft.Network/applicationGateways/httpListeners', '$name', '$name-listener')
+                    }
+                    backendAddressPool: {
+                      id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', '$name', '$name-bap')
+                    }
+                    backendHttpSettings: {
+                      id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', '$name', '$name-bhs')
+                    }
+                  }
+                }
+              ]
             }
           }
         EOT
         outputs {
-          dns_name = "${azurerm_application_gateway.load_balancer.frontend_ip_configuration.0.public_ip_address}"
+          dns_name = "publicIp.properties.dnsSettings.fqdn"
         }
       }
       gcp {
