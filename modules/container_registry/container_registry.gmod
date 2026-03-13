@@ -42,12 +42,14 @@ module "container_registry" {
     case "provider" {
       aws {
         code = <<-EOT
-          resource "aws_ecr_repository" "$name" {
-            name = "$name"
-          }
+          Resources:
+            ContainerRegistry:
+              Type: AWS::ECR::Repository
+              Properties:
+                RepositoryName: $name
         EOT
         outputs {
-          registry_url = "${aws_ecr_repository.container_registry.repository_url}"
+          registry_url = "!GetAtt ContainerRegistry.RepositoryUri"
         }
       }
       azure {
