@@ -44,15 +44,17 @@ module "dns" {
     case "provider" {
       aws {
         code = <<-EOT
-          resource "aws_route53_zone" "$name" {
-            name = "$name"
-          }
+          Resources:
+            DnsHostedZone:
+              Type: AWS::Route53::HostedZone
+              Properties:
+                Name: $name
         EOT
         outputs {
-          zone_id     = "${aws_route53_zone.dns.zone_id}"
-          nameservers = "${aws_route53_zone.dns.name_servers.0}"
+          zone_id     = "!Ref DnsHostedZone"
+          nameservers = "!Select [0, !GetAtt DnsHostedZone.NameServers]"
         }
-        # nameservers exposes the first NS record; production templates should access all name_servers from the aws_route53_zone resource directly
+        # nameservers exposes the first NS record; production templates should access the full NameServers list from the resource directly
       }
       azure {
         code = <<-EOT

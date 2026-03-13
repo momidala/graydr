@@ -42,14 +42,19 @@ module "load_balancer" {
     case "provider" {
       aws {
         code = <<-EOT
-          resource "aws_lb" "$name" {
-            name               = "$name"
-            load_balancer_type = "application"
-            internal           = false
-          }
+          Resources:
+            AppLoadBalancer:
+              Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+              Properties:
+                Name: $name
+                Type: application
+                Scheme: internet-facing
+                Subnets:
+                  - ""
+                  # Production: wire from network module subnet_ids output
         EOT
         outputs {
-          dns_name = "${aws_lb.load_balancer.dns_name}"
+          dns_name = "!GetAtt AppLoadBalancer.DNSName"
         }
       }
       azure {
