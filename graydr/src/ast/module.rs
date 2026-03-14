@@ -62,12 +62,14 @@ pub struct InterfaceBlock {
 /// Declaration of a single input variable.
 ///
 /// `variables` captures `$var` references found in the `default` value string.
+/// `has_type` is true when the input object contains a `type` key (checked by the linter).
 #[derive(Debug, Clone, PartialEq)]
 pub struct InputDecl {
     pub span: Span,
     pub name: Spanned<String>,
     pub required: bool,
     pub sensitive: bool,
+    pub has_type: bool,
     pub default: Option<Spanned<Literal>>,
     pub variables: Vec<SpannedVariable>,
 }

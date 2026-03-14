@@ -498,6 +498,7 @@ mod tests {
                     name: spanned("bucket_name".to_string()),
                     required: true,
                     sensitive: false,
+                    has_type: false,
                     default: None,
                     variables: vec![],
                 })],

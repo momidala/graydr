@@ -45,6 +45,7 @@ fn make_module_with_required_input(input_name: &str) -> ModuleDefinition {
                 name: spanned(input_name.to_string()),
                 required: true,
                 sensitive: false,
+                has_type: false,
                 default: None,
                 variables: vec![],
             })],

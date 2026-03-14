@@ -126,6 +126,7 @@ mod tests {
             name: spanned(name.to_string()),
             required,
             sensitive: false,
+            has_type: false,
             default: None,
             variables: vec![],
         })

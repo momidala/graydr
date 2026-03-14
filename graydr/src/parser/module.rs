@@ -219,8 +219,8 @@ fn parse_interface(
             let attr_span = hcl_range_to_graydr(source, attr.span().unwrap_or(0..0), file);
             let name = attr.key.as_str().to_owned();
 
-            // Value may be an object with `required` and `sensitive` fields.
-            let (required, sensitive) = extract_input_flags(&attr.value);
+            // Value may be an object with `required`, `sensitive`, and `type` fields.
+            let (required, sensitive, has_type) = extract_input_flags(&attr.value);
 
             // Check default value for $variable references.
             let default_str = match &attr.value {
@@ -242,6 +242,7 @@ fn parse_interface(
                     },
                     required,
                     sensitive,
+                    has_type,
                     default: None, // Phase 1: default parsing deferred
                     variables,
                 },
@@ -278,8 +279,11 @@ fn parse_interface(
     })
 }
 
-/// Extract `required` and `sensitive` boolean flags from an input object expression.
-fn extract_input_flags(expr: &hcl_edit::expr::Expression) -> (bool, bool) {
+/// Extract `required`, `sensitive`, and `has_type` boolean flags from an input object expression.
+///
+/// Returns `(required, sensitive, has_type)`.
+/// `has_type` is true when the object contains a `type` key (regardless of value).
+fn extract_input_flags(expr: &hcl_edit::expr::Expression) -> (bool, bool, bool) {
     use hcl_edit::expr::{Expression, ObjectKey};
     if let Expression::Object(obj) = expr {
         let required = obj
@@ -300,9 +304,14 @@ fn extract_input_flags(expr: &hcl_edit::expr::Expression) -> (bool, bool) {
             .and_then(|(_, v)| v.expr().as_bool())
             .unwrap_or(false);
 
-        (required, sensitive)
+        let has_type = obj.iter().any(|(k, _)| match k {
+            ObjectKey::Ident(id) => id.as_str() == "type",
+            _ => false,
+        });
+
+        (required, sensitive, has_type)
     } else {
-        (false, false)
+        (false, false, false)
     }
 }
 
