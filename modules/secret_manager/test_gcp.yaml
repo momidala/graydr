@@ -1,0 +1,6 @@
+provider: gcp
+secret_manager:
+  name: test-secret
+  region: us-central1
+  resource_group_name: ""
+  tenant_id: ""

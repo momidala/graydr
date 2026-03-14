@@ -1,0 +1,6 @@
+provider: azure
+secret_manager:
+  name: test-secret
+  region: eastus
+  resource_group_name: test-rg
+  tenant_id: 00000000-0000-0000-0000-000000000000

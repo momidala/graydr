@@ -1,0 +1,6 @@
+provider: aws
+secret_manager:
+  name: test-secret
+  region: us-east-1
+  resource_group_name: ""
+  tenant_id: ""
