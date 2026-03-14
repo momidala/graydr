@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod cli;
 pub mod codegen;
+pub mod fmt;
 pub mod graph;
 pub mod parser;
 pub mod fragment;
