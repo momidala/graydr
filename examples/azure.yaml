@@ -1,0 +1,16 @@
+provider: azure
+primary:
+  region: eastus
+network_params:
+  name: web-app
+  cidr_block: "10.0.0.0/16"
+db_params:
+  name: web-db
+  db_username: admin
+  db_password: changeme-not-real
+  instance_class: GP_Standard_D2s_v3
+storage_params:
+  bucket_name: web-app-assets
+lb_params:
+  name: web-app-lb
+  resource_group_name: web-app-rg

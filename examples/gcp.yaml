@@ -1,0 +1,16 @@
+provider: gcp
+primary:
+  region: us-central1
+network_params:
+  name: web-app
+  cidr_block: "10.0.0.0/16"
+db_params:
+  name: web-db
+  db_username: admin
+  db_password: changeme-not-real
+  instance_class: db-f1-micro
+storage_params:
+  bucket_name: web-app-assets
+lb_params:
+  name: web-app-lb
+  resource_group_name: ""
