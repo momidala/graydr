@@ -9,7 +9,7 @@ use hcl_edit::visit_mut::VisitMut;
 /// and whitespace decorations. Heredoc nodes are passed through unmodified.
 pub fn format_source(src: &str) -> anyhow::Result<String> {
     let mut body = hcl_edit::parser::parse_body(src)?;
-    let mut visitor = FormatVisitor;
+    let mut visitor = FormatVisitor::new();
     visitor.visit_body_mut(&mut body);
     Ok(body.to_string())
 }
