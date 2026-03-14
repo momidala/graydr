@@ -1,0 +1,90 @@
+module "queue" {
+  metadata {
+    description            = "Cross-cloud managed message queue provisioning SQS (AWS), Service Bus (Azure), and Pub/Sub (GCP)."
+    version                = "1.0.0"
+    security_tier          = "medium"
+    cost_tier              = "variable"
+    data_classification    = "internal"
+    disaster_recovery_tier = "tier2"
+    approval_required      = false
+  }
+
+  interface {
+    inputs {
+      name = {
+        required  = true
+        sensitive = false
+      }
+      region = {
+        required  = true
+        sensitive = false
+      }
+      resource_group_name = {
+        required  = false
+        sensitive = false
+        default   = ""
+      }
+    }
+    outputs {
+      queue_url  = {}
+      queue_name = {}
+    }
+  }
+
+  validation {
+    rule "name_required" {
+      condition     = "$name != \"\""
+      error_message = "name must not be empty"
+      severity      = "error"
+    }
+  }
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-EOT
+          Resources:
+            QueueQueue:
+              Type: AWS::SQS::Queue
+              Properties:
+                QueueName: $name
+        EOT
+        outputs {
+          queue_url = "!Ref QueueQueue"
+        }
+      }
+      azure {
+        code = <<-EOT
+          resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2021-11-01' = {
+            name: '$name-ns'
+            location: '$region'
+            sku: {
+              name: 'Standard'
+              tier: 'Standard'
+            }
+          }
+
+          resource serviceBusQueue 'Microsoft.ServiceBus/namespaces/queues@2021-11-01' = {
+            parent: serviceBusNamespace
+            name: '$name'
+          }
+        EOT
+        outputs {
+          queue_name = "serviceBusQueue.name"
+        }
+      }
+      gcp {
+        code = <<-EOT
+          resource "google_pubsub_topic" "queue" {
+            name = "$name"
+            # Pub/Sub uses a topic/subscription model; this topic is the queue analog.
+            # Add google_pubsub_subscription resources in the consuming template for pull consumers.
+          }
+        EOT
+        outputs {
+          queue_name = "${google_pubsub_topic.queue.name}"
+        }
+      }
+    }
+  }
+}
