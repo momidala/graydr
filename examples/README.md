@@ -30,7 +30,10 @@ Run any or all of the following commands from the repository root. Each command 
 ```bash
 ./target/debug/graydr compile \
   --template examples/web-app-stack.gtpl \
-  --include-path examples/modules \
+  --include-path modules/network \
+  --include-path modules/relational_db \
+  --include-path modules/object_storage \
+  --include-path modules/load_balancer \
   --properties examples/aws.yaml \
   --output infra-aws.yaml
 ```
@@ -40,7 +43,10 @@ Run any or all of the following commands from the repository root. Each command 
 ```bash
 ./target/debug/graydr compile \
   --template examples/web-app-stack.gtpl \
-  --include-path examples/modules \
+  --include-path modules/network \
+  --include-path modules/relational_db \
+  --include-path modules/object_storage \
+  --include-path modules/load_balancer \
   --properties examples/azure.yaml \
   --output infra-azure.bicep
 ```
@@ -50,7 +56,10 @@ Run any or all of the following commands from the repository root. Each command 
 ```bash
 ./target/debug/graydr compile \
   --template examples/web-app-stack.gtpl \
-  --include-path examples/modules \
+  --include-path modules/network \
+  --include-path modules/relational_db \
+  --include-path modules/object_storage \
+  --include-path modules/load_balancer \
   --properties examples/gcp.yaml \
   --output infra-gcp.tf
 ```
