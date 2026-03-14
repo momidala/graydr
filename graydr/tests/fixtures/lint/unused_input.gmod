@@ -1,0 +1,35 @@
+module "unused_input_test" {
+  metadata {
+    name    = "unused_input_test"
+    version = "1.0.0"
+  }
+
+  interface {
+    inputs {
+      size   = { type = "string", required = true }
+      region = { type = "string", required = true }
+    }
+    outputs {
+      endpoint = {}
+    }
+  }
+
+  validation {}
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-CFN
+          Resources:
+            MyBucket:
+              Type: AWS::S3::Bucket
+              Properties:
+                BucketName: !Sub "${AWS::StackName}-$size"
+        CFN
+        outputs {
+          endpoint = "!GetAtt MyBucket.WebsiteURL"
+        }
+      }
+    }
+  }
+}

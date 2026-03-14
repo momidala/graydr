@@ -1,0 +1,32 @@
+module "missing_governance_test" {
+  metadata {
+    name    = "missing_governance_test"
+    version = "1.0.0"
+  }
+
+  interface {
+    inputs {
+      size = { type = "string", required = true }
+    }
+    outputs {
+      endpoint = {}
+    }
+  }
+
+  validation {}
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-CFN
+          Resources:
+            MyBucket:
+              Type: AWS::S3::Bucket
+        CFN
+        outputs {
+          endpoint = "!GetAtt MyBucket.WebsiteURL"
+        }
+      }
+    }
+  }
+}

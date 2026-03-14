@@ -1,0 +1,35 @@
+module "missing_type_test" {
+  metadata {
+    name    = "missing_type_test"
+    version = "1.0.0"
+  }
+
+  interface {
+    inputs {
+      size = { required = true }
+      name = { required = true }
+    }
+    outputs {
+      endpoint = {}
+    }
+  }
+
+  validation {}
+
+  generate {
+    case "provider" {
+      aws {
+        code = <<-CFN
+          Resources:
+            MyBucket:
+              Type: AWS::S3::Bucket
+              Properties:
+                BucketName: !Sub "${AWS::StackName}-$name-$size"
+        CFN
+        outputs {
+          endpoint = "!GetAtt MyBucket.WebsiteURL"
+        }
+      }
+    }
+  }
+}
