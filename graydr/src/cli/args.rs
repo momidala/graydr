@@ -51,3 +51,12 @@ pub struct PublishArgs {
     #[arg(long, value_name = "URL", help = "Registry base URL (overrides GRAYDR_REGISTRY_URL)")]
     pub registry: Option<String>,
 }
+
+/// Arguments for the `fmt` subcommand.
+#[derive(Parser, Debug)]
+pub struct FmtArgs {
+    /// .gmod, .gtpl, or .gfrag files to format
+    pub files: Vec<PathBuf>,
+    #[arg(long, help = "Check if files are canonical without rewriting; exits non-zero if any file would change")]
+    pub check: bool,
+}
