@@ -19,15 +19,14 @@ module "unused_input_test" {
   generate {
     case "provider" {
       aws {
-        code = <<-CFN
-          Resources:
-            MyBucket:
-              Type: AWS::S3::Bucket
-              Properties:
-                BucketName: !Sub "${AWS::StackName}-$size"
-        CFN
+        code = <<-EOT
+          resource "aws_s3_bucket" "my_bucket" {
+            bucket = "my-bucket-$size"
+            region = "${var.region}"
+          }
+        EOT
         outputs {
-          endpoint = "!GetAtt MyBucket.WebsiteURL"
+          endpoint = "${aws_s3_bucket.my_bucket.bucket_regional_domain_name}"
         }
       }
     }

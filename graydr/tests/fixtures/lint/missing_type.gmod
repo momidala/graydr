@@ -19,15 +19,14 @@ module "missing_type_test" {
   generate {
     case "provider" {
       aws {
-        code = <<-CFN
-          Resources:
-            MyBucket:
-              Type: AWS::S3::Bucket
-              Properties:
-                BucketName: !Sub "${AWS::StackName}-$name-$size"
-        CFN
+        code = <<-EOT
+          resource "aws_s3_bucket" "$name" {
+            bucket = "$name-$size"
+            region = "${var.region}"
+          }
+        EOT
         outputs {
-          endpoint = "!GetAtt MyBucket.WebsiteURL"
+          endpoint = "${aws_s3_bucket.missing_type_test.bucket_regional_domain_name}"
         }
       }
     }
