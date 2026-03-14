@@ -36,12 +36,12 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
         let resource_name = resource.name.value.clone();
         let module_name = &resource.module_ref.value;
 
-        // Resolve .gmod path: {include_path}/{module_name}.gmod
-        let gmod_path = if let Some(ref inc) = args.include_path {
-            inc.join(format!("{}.gmod", module_name))
-        } else {
-            Path::new(&format!("{}.gmod", module_name)).to_path_buf()
-        };
+        // Resolve .gmod path: search each include_path in order, first found wins.
+        let gmod_filename = format!("{}.gmod", module_name);
+        let gmod_path = args.include_path.iter()
+            .map(|p| p.join(&gmod_filename))
+            .find(|p| p.exists())
+            .unwrap_or_else(|| Path::new(&gmod_filename).to_path_buf());
 
         let gmod_path_str = gmod_path.to_string_lossy().to_string();
         let gmod_source = fs::read_to_string(&gmod_path)
@@ -239,7 +239,7 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
     let groups = assemble_by_provider_region(&topo, &provider_map, &region_map, &region_mapping);
 
     // ── Step 15+16: Render each group and concatenate output ──────────────
-    let include_path = args.include_path.as_deref();
+    let include_path = &args.include_path;
 
     // Build an optional registry client when GRAYDR_REGISTRY_URL is configured.
     // When set, expand_includes() will resolve registry coordinates via HTTP.

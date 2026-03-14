@@ -6,8 +6,8 @@ use std::path::PathBuf;
 pub struct CompileArgs {
     #[arg(long, help = "Path to .gtpl template file")]
     pub template: PathBuf,
-    #[arg(long, help = "Directory to search for .gmod files and .gfrag fragments")]
-    pub include_path: Option<PathBuf>,
+    #[arg(long, help = "Directory to search for .gmod files and .gfrag fragments (repeatable)")]
+    pub include_path: Vec<PathBuf>,
     #[arg(short = 'D', value_name = "KEY=VALUE", help = "Override variable (repeatable)")]
     pub defines: Vec<String>,
     #[arg(long, value_name = "FILE", help = "Properties file (repeatable, later takes precedence)")]

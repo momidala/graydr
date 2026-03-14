@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use crate::ast::module::{CaseArm, MetadataBlock, ModuleDefinition, ValidationSeverity};
 use crate::ast::template::ResourceInstance;
@@ -221,7 +221,7 @@ pub fn assemble_output(
     arm_map: &HashMap<String, CaseArm>,
     ctx: &ResolveContext,
     resource_map: &HashMap<String, ResourceInstance>,
-    include_path: Option<&Path>,
+    include_paths: &[PathBuf],
     registry: Option<&RegistryClient>,
 ) -> Result<AssembleResult, AssembleError> {
     use std::sync::Arc;
@@ -254,12 +254,13 @@ pub fn assemble_output(
 
     for resource_name in &group.resources_in_order {
         if let Some(arm) = arm_map.get(resource_name) {
-            let code_to_render = if let Some(inc_path) = include_path {
+            let code_to_render = if !include_paths.is_empty() {
                 let source_file = arm.code.span.file.as_ref();
+                let paths_ref: Vec<&Path> = include_paths.iter().map(|p| p.as_path()).collect();
                 let (expanded, source_map) = crate::fragment::expand_includes(
                     &arm.code.value,
                     source_file,
-                    inc_path,
+                    &paths_ref,
                     &mut Vec::new(),
                     registry,
                 )?;
@@ -568,7 +569,7 @@ mod tests {
             resources_in_order: vec!["res1".to_string()],
         };
 
-        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, None, None)
+        let result = assemble_output(&group, &module_map, &arm_map, &ctx, &resource_map, &[], None)
             .expect("assemble_output with no includes must succeed");
         assert!(
             result.output.contains("my-bucket"),
@@ -609,7 +610,7 @@ mod tests {
         let tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures");
         let result = assemble_output(
             &group, &module_map, &arm_map, &ctx, &resource_map,
-            Some(&PathBuf::from("/nonexistent_include_path")),
+            &[PathBuf::from("/nonexistent_include_path")],
             None,
         );
         // Must fail — include path doesn't contain "nonexistent_file.gfrag".

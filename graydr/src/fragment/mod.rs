@@ -88,7 +88,7 @@ fn is_registry_coordinate(path: &str) -> bool {
 pub fn expand_includes(
     code: &str,
     source_file: &str,
-    include_path: &Path,
+    include_paths: &[&Path],
     call_stack: &mut Vec<String>,
     registry: Option<&RegistryClient>,
 ) -> Result<(String, SourceMap), FragmentError> {
@@ -157,12 +157,15 @@ pub fn expand_includes(
                 }
             }
 
-            // Resolve the include path relative to include_path.
-            let candidate = include_path.join(path_str);
-            let canonical = candidate.canonicalize().map_err(|_| FragmentError::FileNotFound {
-                path: path_str.to_string(),
-                included_from: source_file.to_string(),
-            })?;
+            // Resolve the include path: try each path in order, first found wins.
+            let canonical = include_paths
+                .iter()
+                .map(|p| p.join(path_str))
+                .find_map(|candidate| candidate.canonicalize().ok())
+                .ok_or_else(|| FragmentError::FileNotFound {
+                    path: path_str.to_string(),
+                    included_from: source_file.to_string(),
+                })?;
             let canonical_str = canonical.to_string_lossy().into_owned();
 
             // Cycle detection: if canonical_str is already on the call stack.
@@ -197,11 +200,12 @@ pub fn expand_includes(
                 .parent()
                 .unwrap_or_else(|| Path::new("."))
                 .to_path_buf();
+            let next_paths: &[&Path] = &[&next_include_path];
 
             let (expanded_frag, inner_map) = expand_includes(
                 &frag_def.code.value,
                 &canonical_str,
-                &next_include_path,
+                next_paths,
                 call_stack,
                 registry,
             )?;
@@ -261,7 +265,7 @@ extra line"#;
         let (expanded, source_map) = expand_includes(
             code,
             "root.gfrag",
-            &fixtures,
+            &[fixtures.as_path()],
             &mut Vec::new(),
             None,
         )
@@ -293,7 +297,7 @@ extra line"#;
         let result = expand_includes(
             code,
             "root.gfrag",
-            &fixtures,
+            &[fixtures.as_path()],
             &mut Vec::new(),
             None,
         );
@@ -316,7 +320,7 @@ extra line"#;
         let result = expand_includes(
             code,
             "root.gfrag",
-            &fixtures,
+            &[fixtures.as_path()],
             &mut Vec::new(),
             None,
         );
@@ -347,7 +351,7 @@ after line"#;
         let (_expanded, source_map) = expand_includes(
             code,
             "root.gfrag",
-            &fixtures,
+            &[fixtures.as_path()],
             &mut Vec::new(),
             None,
         )
@@ -377,7 +381,7 @@ after line"#;
         let result = expand_includes(
             code,
             "root.gfrag",
-            &fixtures,
+            &[fixtures.as_path()],
             &mut Vec::new(),
             None,
         );
@@ -401,7 +405,7 @@ after line"#;
         let result = expand_includes(
             code,
             "root.gfrag",
-            &fixtures,
+            &[fixtures.as_path()],
             &mut Vec::new(),
             None,
         );
@@ -423,7 +427,7 @@ include "diamond_c.gfrag""#;
         let result = expand_includes(
             code,
             "diamond_a.gfrag",
-            &fixtures,
+            &[fixtures.as_path()],
             &mut Vec::new(),
             None,
         );
@@ -471,7 +475,7 @@ include "diamond_c.gfrag""#;
         let (expanded, _) = expand_includes(
             code,
             "root",
-            std::path::Path::new("."),
+            &[std::path::Path::new(".")],
             &mut vec![],
             Some(&client),
         )
@@ -505,7 +509,7 @@ include "diamond_c.gfrag""#;
         let result = expand_includes(
             code,
             "root",
-            std::path::Path::new("."),
+            &[std::path::Path::new(".")],
             &mut vec![],
             Some(&client),
         );

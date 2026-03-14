@@ -18,7 +18,7 @@ fn test_expand_includes_end_to_end() {
     let (expanded, source_map) = expand_includes(
         code,
         "root.gmod",
-        &fixtures,
+        &[fixtures.as_path()],
         &mut Vec::new(),
         None,
     )
@@ -57,7 +57,7 @@ fn test_circular_include_hard_error() {
     let result = expand_includes(
         code,
         "root.gmod",
-        &fixtures,
+        &[fixtures.as_path()],
         &mut Vec::new(),
         None,
     );
@@ -93,7 +93,7 @@ fn test_source_map_fragment_position() {
     let (expanded, source_map) = expand_includes(
         code,
         "root.gmod",
-        &fixtures,
+        &[fixtures.as_path()],
         &mut Vec::new(),
         None,
     )
