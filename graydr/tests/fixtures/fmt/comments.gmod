@@ -9,10 +9,15 @@ module "commented" {
   interface {
     inputs {
       // The size variable controls resource tier
-      size { type = string, required = true }
+      size {
+        type     = string
+        required = true
+      }
     }
     outputs {
-      endpoint { type = string } // output comment
+      endpoint {
+        type = string // output comment
+      }
     }
   }
 }

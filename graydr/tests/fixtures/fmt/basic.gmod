@@ -6,11 +6,19 @@ module "example" {
   }
   interface {
     inputs {
-      size { type = string, required = true }
-      name    {  type   = string, required    = true }
+      size {
+        type = string
+        required = true
+      }
+      name    {
+        type   = string
+        required    = true
+      }
     }
     outputs {
-      endpoint { type = string }
+      endpoint {
+        type = string
+      }
     }
   }
 }
