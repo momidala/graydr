@@ -1,0 +1,5 @@
+provider: azure
+queue:
+  name: test-queue
+  region: eastus
+  resource_group_name: test-rg

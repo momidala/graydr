@@ -1,0 +1,5 @@
+provider: aws
+queue:
+  name: test-queue
+  region: us-east-1
+  resource_group_name: ""
