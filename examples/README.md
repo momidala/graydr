@@ -23,7 +23,7 @@ The binary will be at `./target/debug/graydr`.
 
 ## Compile Against Each Cloud
 
-Run any or all of the following commands from the repository root. Each command produces provider-native IaC printed to stdout.
+Run any or all of the following commands from the repository root. Each command writes provider-native IaC to a file via `--output`. If you omit `--output`, the compiled IaC is printed to stdout instead.
 
 ### AWS — CloudFormation YAML
 
@@ -31,7 +31,8 @@ Run any or all of the following commands from the repository root. Each command 
 ./target/debug/graydr compile \
   --template examples/web-app-stack.gtpl \
   --include-path examples/modules \
-  --properties examples/aws.yaml
+  --properties examples/aws.yaml \
+  --output infra-aws.yaml
 ```
 
 ### Azure — Bicep
@@ -40,7 +41,8 @@ Run any or all of the following commands from the repository root. Each command 
 ./target/debug/graydr compile \
   --template examples/web-app-stack.gtpl \
   --include-path examples/modules \
-  --properties examples/azure.yaml
+  --properties examples/azure.yaml \
+  --output infra-azure.bicep
 ```
 
 ### GCP — Terraform (google provider)
@@ -49,7 +51,8 @@ Run any or all of the following commands from the repository root. Each command 
 ./target/debug/graydr compile \
   --template examples/web-app-stack.gtpl \
   --include-path examples/modules \
-  --properties examples/gcp.yaml
+  --properties examples/gcp.yaml \
+  --output infra-gcp.tf
 ```
 
 ## What the Template Wires Together
