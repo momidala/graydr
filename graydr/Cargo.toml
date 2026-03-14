@@ -1,7 +1,15 @@
 [package]
 name = "graydr"
-version = "0.2.0"
+version = "1.2.0"
 edition = "2021"
+description = "Multi-cloud IaC compiler — write once, compile to CloudFormation, Bicep, or Terraform"
+license = "AGPL-3.0-only"
+repository = "https://github.com/momidala/graydr"
+homepage = "https://github.com/momidala/graydr"
+documentation = "https://github.com/momidala/graydr/tree/main/docs"
+readme = "../README.md"
+keywords = ["infrastructure", "iac", "terraform", "cloudformation", "bicep"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "graydr"

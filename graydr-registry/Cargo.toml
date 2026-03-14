@@ -1,7 +1,13 @@
 [package]
 name = "graydr-registry"
-version = "0.1.0"
+version = "1.2.0"
 edition = "2021"
+description = "Self-hostable module registry server for graydr"
+license = "AGPL-3.0-only"
+repository = "https://github.com/momidala/graydr"
+homepage = "https://github.com/momidala/graydr"
+keywords = ["infrastructure", "iac", "registry", "modules"]
+categories = ["command-line-utilities", "web-programming::http-server"]
 
 [[bin]]
 name = "graydr-registry"
