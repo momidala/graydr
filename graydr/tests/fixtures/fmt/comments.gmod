@@ -1,0 +1,18 @@
+// Top-level comment about this module
+module "commented" {
+  // Metadata section comment
+  metadata {
+    name    = "commented"
+    version = "1.0.0"
+    // description intentionally omitted
+  }
+  interface {
+    inputs {
+      // The size variable controls resource tier
+      size { type = string, required = true }
+    }
+    outputs {
+      endpoint { type = string } // output comment
+    }
+  }
+}

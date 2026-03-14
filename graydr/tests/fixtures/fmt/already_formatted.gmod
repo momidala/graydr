@@ -1,0 +1,18 @@
+module "formatted" {
+  metadata {
+    name        = "formatted"
+    version     = "1.0.0"
+    description = "Already canonical"
+  }
+
+  interface {
+    inputs {
+      size { type = string, required = true }
+      name { type = string, required = true }
+    }
+
+    outputs {
+      endpoint { type = string }
+    }
+  }
+}
