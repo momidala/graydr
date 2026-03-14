@@ -142,10 +142,32 @@ fn replace_last_line_indent(prefix: &str, indent: &str) -> String {
     }
 }
 
-/// Returns true if the structure is an attribute whose value is a heredoc template.
+/// Returns true if the structure is an attribute that breaks an alignment run.
+///
+/// Alignment runs are broken by:
+/// - Heredoc template values (multi-line, content must be preserved byte-identical)
+/// - Multi-line object literals (e.g., `name = {\n  required = true\n}`) where the
+///   object body spans multiple lines. Single-line objects (`= { a = 1, b = 2 }`)
+///   and empty objects (`= {}`) remain in runs and are aligned with their siblings.
+///
+/// Multi-line detection: if the first item in the object's body has a decor prefix
+/// containing a newline, the object was written across multiple lines in the source.
 fn is_heredoc_attr(s: &Structure) -> bool {
     match s {
-        Structure::Attribute(attr) => matches!(&attr.value, Expression::HeredocTemplate(_)),
+        Structure::Attribute(attr) => match &attr.value {
+            Expression::HeredocTemplate(_) => true,
+            Expression::Object(obj) => {
+                // Check if the first item's prefix contains a newline —
+                // indicating the object spans multiple lines.
+                obj.iter().next().map_or(false, |(key, _value)| {
+                    key.decor()
+                        .prefix()
+                        .map(|p| p.contains('\n'))
+                        .unwrap_or(false)
+                })
+            }
+            _ => false,
+        },
         _ => false,
     }
 }
