@@ -120,6 +120,11 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
             if binding.variables.is_empty() {
                 let key = format!("{}.{}", resource_name, binding.key.value);
                 gtpl_overrides.insert(key, binding.value.value.clone());
+                // Also insert bare alias so module code blocks can resolve $input_name
+                // directly (e.g. cross-resource wiring: subnet_ids = "${net.subnet_ids}"
+                // must be available as bare `subnet_ids` when rendering module code).
+                let bare_key = binding.key.value.clone();
+                gtpl_overrides.entry(bare_key).or_insert_with(|| binding.value.value.clone());
             }
         }
     }
