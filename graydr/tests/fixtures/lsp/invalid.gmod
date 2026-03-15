@@ -1,36 +1,32 @@
 module "lsp_test_invalid" {
   metadata {
-    name        = "lsp_test_invalid"
-    version     = "1.0.0"
-    description = "LSP integration test fixture — lint warning"
-    authors     = ["test"]
-    tags        = ["test"]
-    lifecycle {
-      maturity = "stable"
-    }
-    governance {
-      security_tier         = "low"
-      compliance_frameworks = []
-      data_classification   = "public"
-    }
+    name                   = "lsp_test_invalid"
+    version                = "1.0.0"
+    description            = "LSP integration test fixture — lint warning (size missing type)"
+    security_tier          = "low"
+    compliance_frameworks  = "none"
+    cost_tier              = "low"
+    data_classification    = "public"
+    disaster_recovery_tier = "none"
   }
   interface {
     inputs {
-      provider { type = string, required = true }
-      size     {}
+      provider = { type = "string", required = true }
+      size     = {}
     }
     outputs {
-      value { type = string }
+      value = {}
     }
   }
+  validation {}
   generate {
-    case ($provider) {
-      "aws": {
+    case "provider" {
+      aws {
         code = <<-BODY
-          resource "null_resource" "test" { tags = { Size = "$size" } }
+          resource "null_resource" "test_$provider" { tags = { Size = "$size" } }
         BODY
         outputs {
-          value = "null_resource.test.id"
+          value = "null_resource.test_$provider.id"
         }
       }
     }

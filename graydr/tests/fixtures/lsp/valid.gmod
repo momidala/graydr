@@ -1,35 +1,31 @@
 module "lsp_test_valid" {
   metadata {
-    name        = "lsp_test_valid"
-    version     = "1.0.0"
-    description = "LSP integration test fixture — no errors"
-    authors     = ["test"]
-    tags        = ["test"]
-    lifecycle {
-      maturity = "stable"
-    }
-    governance {
-      security_tier         = "low"
-      compliance_frameworks = []
-      data_classification   = "public"
-    }
+    name                   = "lsp_test_valid"
+    version                = "1.0.0"
+    description            = "LSP integration test fixture — no errors"
+    security_tier          = "low"
+    compliance_frameworks  = "none"
+    cost_tier              = "low"
+    data_classification    = "public"
+    disaster_recovery_tier = "none"
   }
   interface {
     inputs {
-      provider { type = string, required = true }
+      provider = { type = "string", required = true }
     }
     outputs {
-      value { type = string }
+      value = {}
     }
   }
+  validation {}
   generate {
-    case ($provider) {
-      "aws": {
+    case "provider" {
+      aws {
         code = <<-BODY
-          resource "null_resource" "test" {}
+          resource "null_resource" "test_$provider" {}
         BODY
         outputs {
-          value = "null_resource.test.id"
+          value = "null_resource.test_$provider.id"
         }
       }
     }
