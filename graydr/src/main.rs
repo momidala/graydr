@@ -18,6 +18,8 @@ enum Commands {
     Fmt(FmtArgs),
     Lint(LintArgs),
     Version,
+    /// Start the Language Server Protocol server over stdio
+    Lsp,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -32,6 +34,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Version => {
             println!("{}", env!("CARGO_PKG_VERSION"));
         }
+        Commands::Lsp => graydr::cli::lsp::run_lsp(),
     }
     Ok(())
 }
