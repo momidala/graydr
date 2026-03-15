@@ -1,0 +1,41 @@
+module "completion_context_module" {
+  metadata {
+    name        = "completion_context_module"
+    version     = "1.0.0"
+    description = "Fixture module for LSP completion tests"
+    authors     = ["test"]
+    tags        = ["test"]
+    lifecycle {
+      maturity = "stable"
+    }
+    governance {
+      security_tier = "low"
+    }
+  }
+
+  interface {
+    inputs {
+      vpc_id = { required = true }
+      size   = { required = true }
+      name   = { required = true }
+    }
+    outputs {
+      endpoint = {}
+    }
+  }
+
+  validation {}
+
+  generate {
+    case ($provider) {
+      "aws" = {
+        code = <<-TF
+          resource "aws_thing" "test" {}
+        TF
+        outputs {
+          endpoint = "aws_thing.test.id"
+        }
+      }
+    }
+  }
+}
