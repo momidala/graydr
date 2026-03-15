@@ -1,0 +1,53 @@
+{
+  "scopeName": "source.gfrag",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#heredoc" },
+    { "include": "#keyword" },
+    { "include": "#block-label" },
+    { "include": "#string" },
+    { "include": "#variable" },
+    { "include": "#number" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.gfrag",
+      "match": "//.*$"
+    },
+    "keyword": {
+      "name": "keyword.control.gfrag",
+      "match": "\\b(module|template|fragment|ruleset|parameters|interface|inputs|outputs|generate|case|validation|metadata|include|depends_on|lifecycle|governance|resource|maturity)\\b"
+    },
+    "block-label": {
+      "name": "entity.name.type.gfrag",
+      "match": "(?<=\\b(?:module|template|fragment|ruleset|resource|rule)\\s+)\"[^\"]*\""
+    },
+    "heredoc": {
+      "name": "markup.raw.block.gfrag",
+      "begin": "<<-?([A-Z_][A-Z_0-9]*)",
+      "end": "^\\s*\\1(->>)?$",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.gfrag" },
+        "1": { "name": "keyword.other.heredoc-id.gfrag" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.gfrag" }
+      },
+      "contentName": "string.unquoted.heredoc.gfrag"
+    },
+    "string": {
+      "name": "string.quoted.double.gfrag",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "include": "#variable" }]
+    },
+    "variable": {
+      "name": "variable.other.gfrag",
+      "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)?"
+    },
+    "number": {
+      "name": "constant.numeric.gfrag",
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+    }
+  }
+}

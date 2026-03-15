@@ -1,0 +1,43 @@
+{
+  "name": "graydr",
+  "displayName": "graydr",
+  "description": "Syntax highlighting and IntelliSense for graydr (.gmod, .gtpl, .gfrag, .grule)",
+  "version": "0.0.1",
+  "publisher": "momidala",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages"],
+  "activationEvents": [
+    "onLanguage:gmod",
+    "onLanguage:gtpl",
+    "onLanguage:gfrag",
+    "onLanguage:grule"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      { "id": "gmod", "aliases": ["Graydr Module", "gmod"], "extensions": [".gmod"] },
+      { "id": "gtpl", "aliases": ["Graydr Template", "gtpl"], "extensions": [".gtpl"] },
+      { "id": "gfrag", "aliases": ["Graydr Fragment", "gfrag"], "extensions": [".gfrag"] },
+      { "id": "grule", "aliases": ["Graydr Ruleset", "grule"], "extensions": [".grule"] }
+    ],
+    "grammars": [
+      { "language": "gmod",  "scopeName": "source.gmod",  "path": "./syntaxes/gmod.tmLanguage.json" },
+      { "language": "gtpl",  "scopeName": "source.gtpl",  "path": "./syntaxes/gtpl.tmLanguage.json" },
+      { "language": "gfrag", "scopeName": "source.gfrag", "path": "./syntaxes/gfrag.tmLanguage.json" },
+      { "language": "grule", "scopeName": "source.grule", "path": "./syntaxes/grule.tmLanguage.json" }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
+    "esbuild": "^0.20.0"
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "vscode:prepublish": "node esbuild.js --production"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "scopeName": "source.grule",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#heredoc" },
+    { "include": "#keyword" },
+    { "include": "#block-label" },
+    { "include": "#string" },
+    { "include": "#variable" },
+    { "include": "#number" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.grule",
+      "match": "//.*$"
+    },
+    "keyword": {
+      "name": "keyword.control.grule",
+      "match": "\\b(module|template|fragment|ruleset|parameters|interface|inputs|outputs|generate|case|validation|metadata|include|depends_on|lifecycle|governance|resource|maturity|requires|providers|naming)\\b"
+    },
+    "block-label": {
+      "name": "entity.name.type.grule",
+      "match": "(?<=\\b(?:module|template|fragment|ruleset|resource|rule)\\s+)\"[^\"]*\""
+    },
+    "heredoc": {
+      "name": "markup.raw.block.grule",
+      "begin": "<<-?([A-Z_][A-Z_0-9]*)",
+      "end": "^\\s*\\1(->>)?$",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.grule" },
+        "1": { "name": "keyword.other.heredoc-id.grule" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.grule" }
+      },
+      "contentName": "string.unquoted.heredoc.grule"
+    },
+    "string": {
+      "name": "string.quoted.double.grule",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "include": "#variable" }]
+    },
+    "variable": {
+      "name": "variable.other.grule",
+      "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)?"
+    },
+    "number": {
+      "name": "constant.numeric.grule",
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+    }
+  }
+}
