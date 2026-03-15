@@ -4,7 +4,7 @@ use thiserror::Error;
 use crate::ast::module::{CaseArm, MetadataBlock, ModuleDefinition, ValidationSeverity};
 use crate::ast::template::ResourceInstance;
 use crate::ast::span::Span;
-use crate::registry::RegistryClient;
+use crate::hooks::RegistryBackend;
 use crate::resolver::context::ResolveContext;
 use crate::resolver::error::ResolveError;
 use crate::graph::AssemblyGroup;
@@ -222,7 +222,7 @@ pub fn assemble_output(
     ctx: &ResolveContext,
     resource_map: &HashMap<String, ResourceInstance>,
     include_paths: &[PathBuf],
-    registry: Option<&RegistryClient>,
+    registry: Option<&dyn RegistryBackend>,
 ) -> Result<AssembleResult, AssembleError> {
     use std::sync::Arc;
 

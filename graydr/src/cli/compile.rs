@@ -254,7 +254,7 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
     let mut all_output = String::new();
 
     for group in &groups {
-        let result = assemble_output(group, &module_map, &arm_map, &ctx, &resource_map, include_path, registry_client.as_ref())
+        let result = assemble_output(group, &module_map, &arm_map, &ctx, &resource_map, include_path, registry_client.as_ref().map(|c| c as &dyn crate::hooks::RegistryBackend).as_deref())
             .with_context(|| format!("assembling output for provider={} region={}", group.provider, group.region))?;
         if !all_output.is_empty() {
             all_output.push('\n');

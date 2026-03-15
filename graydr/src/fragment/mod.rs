@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use regex::Regex;
 
-use crate::registry::RegistryClient;
+use crate::hooks::RegistryBackend;
 use crate::registry::coord::ModuleCoord;
 
 #[derive(Debug, Error)]
@@ -90,7 +90,7 @@ pub fn expand_includes(
     source_file: &str,
     include_paths: &[&Path],
     call_stack: &mut Vec<String>,
-    registry: Option<&RegistryClient>,
+    registry: Option<&dyn RegistryBackend>,
 ) -> Result<(String, SourceMap), FragmentError> {
     let include_re =
         Regex::new(r#"^\s*include\s+"([^"]+)"\s*$"#).expect("include regex is valid");
@@ -477,7 +477,7 @@ include "diamond_c.gfrag""#;
             "root",
             &[std::path::Path::new(".")],
             &mut vec![],
-            Some(&client),
+            Some(&client as &dyn RegistryBackend),
         )
         .unwrap();
         assert!(
@@ -511,7 +511,7 @@ include "diamond_c.gfrag""#;
             "root",
             &[std::path::Path::new(".")],
             &mut vec![],
-            Some(&client),
+            Some(&client as &dyn RegistryBackend),
         );
         assert!(
             matches!(result, Err(FragmentError::RetiredModule { .. })),
