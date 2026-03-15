@@ -1,5 +1,12 @@
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
+use graydr::cli::compile::run_compile;
+use graydr::cli::args::CompileArgs;
+use graydr::hooks::{
+    CompileHooks, CompileSummary, ModuleResolver, ModuleResolveError,
+    PostCompileHook, FilesystemModuleResolver, NoOpPostCompileHook,
+};
 
 fn cargo_run(args: &[&str]) -> std::process::Output {
     Command::new("cargo")
@@ -113,6 +120,109 @@ fn test_init_template_writes_file() {
         out_path,
         String::from_utf8_lossy(&validate_output.stderr)
     );
+}
+
+// ---------------------------------------------------------------------------
+// Hook substitution tests (EXT-1, EXT-2, EXT-3)
+// ---------------------------------------------------------------------------
+
+/// A resolver that returns fixed hardcoded content for any module name.
+struct FixedContentResolver(String);
+
+impl ModuleResolver for FixedContentResolver {
+    fn resolve(&self, _module_name: &str, _include_paths: &[std::path::PathBuf]) -> Result<String, ModuleResolveError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// A hook that records the CompileSummary it receives.
+struct RecordingHook(Arc<Mutex<Option<CompileSummary>>>);
+
+impl PostCompileHook for RecordingHook {
+    fn on_compile_success(&self, summary: &CompileSummary) {
+        let mut guard = self.0.lock().unwrap();
+        *guard = Some(summary.clone());
+    }
+}
+
+/// EXT-1: a dummy ModuleResolver substitutes a fake module and compile still succeeds.
+#[test]
+fn test_compile_uses_resolver_hook() {
+    let sample_gmod_content = std::fs::read_to_string(fixture("sample.gmod"))
+        .expect("could not read sample.gmod fixture");
+
+    let hooks = CompileHooks {
+        module_resolver: Box::new(FixedContentResolver(sample_gmod_content)),
+        registry_backend: None,
+        post_compile: Box::new(NoOpPostCompileHook),
+    };
+
+    let args = CompileArgs {
+        template: std::path::PathBuf::from(fixture("sample.gtpl")),
+        include_path: vec![std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")))],
+        properties: vec![std::path::PathBuf::from(fixture("sample.props.yaml"))],
+        defines: vec!["primary_db.name=test-bucket".to_string()],
+        output: None,
+    };
+
+    let result = run_compile(args, &hooks);
+    assert!(result.is_ok(), "compile with FixedContentResolver failed: {:?}", result.err());
+}
+
+/// EXT-2: a recording PostCompileHook captures the CompileSummary fields.
+#[test]
+fn test_post_compile_hook_captures_summary() {
+    let captured: Arc<Mutex<Option<CompileSummary>>> = Arc::new(Mutex::new(None));
+    let recording_hook = RecordingHook(Arc::clone(&captured));
+
+    let hooks = CompileHooks {
+        module_resolver: Box::new(FilesystemModuleResolver),
+        registry_backend: None,
+        post_compile: Box::new(recording_hook),
+    };
+
+    let args = CompileArgs {
+        template: std::path::PathBuf::from(fixture("sample.gtpl")),
+        include_path: vec![std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")))],
+        properties: vec![std::path::PathBuf::from(fixture("sample.props.yaml"))],
+        defines: vec!["primary_db.name=test-bucket".to_string()],
+        output: None,
+    };
+
+    let result = run_compile(args, &hooks);
+    assert!(result.is_ok(), "compile with RecordingHook failed: {:?}", result.err());
+
+    let guard = captured.lock().unwrap();
+    let summary = guard.as_ref().expect("PostCompileHook was never called — summary not captured");
+    assert!(
+        !summary.modules_used.is_empty(),
+        "expected non-empty modules_used in captured summary"
+    );
+    assert!(
+        !summary.arms_selected.is_empty(),
+        "expected non-empty arms_selected in captured summary"
+    );
+}
+
+/// EXT-3: a no-op RegistryBackend (None) can be injected and compile still succeeds.
+#[test]
+fn test_noop_registry_backend_compile() {
+    let hooks = CompileHooks {
+        module_resolver: Box::new(FilesystemModuleResolver),
+        registry_backend: None,
+        post_compile: Box::new(NoOpPostCompileHook),
+    };
+
+    let args = CompileArgs {
+        template: std::path::PathBuf::from(fixture("sample.gtpl")),
+        include_path: vec![std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")))],
+        properties: vec![std::path::PathBuf::from(fixture("sample.props.yaml"))],
+        defines: vec!["primary_db.name=test-bucket".to_string()],
+        output: None,
+    };
+
+    let result = run_compile(args, &hooks);
+    assert!(result.is_ok(), "compile with noop registry_backend failed: {:?}", result.err());
 }
 
 #[test]
