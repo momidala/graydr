@@ -9,6 +9,7 @@ module "completion_context_module" {
       maturity = "stable"
     }
     governance {
+
       security_tier = "low"
     }
   }
@@ -27,8 +28,8 @@ module "completion_context_module" {
   validation {}
 
   generate {
-    case ($provider) {
-      "aws" = {
+    case "provider" {
+      aws {
         code = <<-TF
           resource "aws_thing" "test" {}
         TF

@@ -268,9 +268,7 @@ fn test_lsp_stdout_clean() {
 
 /// SC-2: Completion — typing inside inputs {} block returns declared input names.
 /// No completions inside heredoc code blocks.
-/// RED in Wave 0 (completion capability not yet advertised by lsp.rs).
 #[test]
-#[ignore = "RED: completion handler not yet implemented (Plan 22-02)"]
 fn test_lsp_completion() {
     let fixture_path = lsp_fixture("completion_context.gtpl");
     let fixture_uri = format!(
@@ -339,9 +337,7 @@ fn test_lsp_completion() {
 }
 
 /// SC-3: Hover — hovering over a governance metadata field returns description and accepted values.
-/// RED in Wave 0 (hover capability not yet advertised by lsp.rs).
 #[test]
-#[ignore = "RED: hover handler not yet implemented (Plan 22-02)"]
 fn test_lsp_hover() {
     let fixture_path = lsp_fixture("completion_context_module.gmod");
     let fixture_uri = format!(
@@ -409,9 +405,7 @@ fn test_lsp_hover() {
 }
 
 /// SC-4: Go-to-definition — pressing go-to-definition on a module reference navigates to the .gmod file.
-/// RED in Wave 0 (definition capability not yet advertised by lsp.rs).
 #[test]
-#[ignore = "RED: goto_definition handler not yet implemented (Plan 22-02)"]
 fn test_lsp_goto_definition() {
     let fixture_path = lsp_fixture("completion_context.gtpl");
     let fixture_uri = format!(

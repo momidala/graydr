@@ -124,18 +124,209 @@ impl LanguageServer for Backend {
         self.client.publish_diagnostics(uri, vec![], None).await;
     }
 
-    async fn completion(&self, _params: CompletionParams) -> LspResult<Option<CompletionResponse>> {
-        Ok(None)
+    async fn completion(&self, params: CompletionParams) -> LspResult<Option<CompletionResponse>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = &params.text_document_position.position;
+
+        // Only provide completions in .gtpl files (inputs block context)
+        let uri_str = uri.as_str();
+        if !uri_str.ends_with(".gtpl") {
+            return Ok(None);
+        }
+
+        // Get current document text
+        let text = {
+            let docs = self.documents.read().await;
+            match docs.get(uri) {
+                Some(t) => t.clone(),
+                None => return Ok(None),
+            }
+        };
+
+        // Parse the template AST
+        let template = match parse_template_file(&text, uri_str) {
+            Ok(t) => t,
+            Err(_) => return Ok(None), // Incomplete document; no completions
+        };
+
+        // Find which resource's block contains the cursor position
+        // Span uses 1-indexed lines/cols; LSP position is 0-indexed.
+        let cursor_line = position.line as u32 + 1; // 0-indexed -> 1-indexed
+
+        let mut module_ref: Option<String> = None;
+        for resource in &template.resources {
+            let res_span = &resource.span;
+            // Check if cursor is inside this resource's span
+            if cursor_line < res_span.start_line || cursor_line > res_span.end_line {
+                continue;
+            }
+            // Cursor is inside this resource block — use its module_ref for completions
+            module_ref = Some(resource.value.module_ref.value.clone());
+            break;
+        }
+
+        let module_name = match module_ref {
+            Some(m) => m,
+            None => return Ok(None),
+        };
+
+        // Find the .gmod file: try workspace root first, then document directory as fallback.
+        let root = {
+            let r = self.root_uri.read().await;
+            r.clone()
+        };
+        let gmod_path = if root.is_some() {
+            find_gmod_file(&root, &module_name)?
+        } else {
+            // Derive search root from the document's own directory
+            let doc_dir = uri_to_parent_dir(uri_str);
+            find_gmod_file(&doc_dir, &module_name)?
+        };
+        let gmod_path = match gmod_path {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+
+        // Parse the module to get its interface inputs
+        let gmod_text = match std::fs::read_to_string(&gmod_path) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let module = match parse_module_file(&gmod_text, &gmod_path.to_string_lossy()) {
+            Ok(m) => m,
+            Err(_) => return Ok(None),
+        };
+
+        // Build completion items from interface inputs
+        let items: Vec<CompletionItem> = module
+            .interface
+            .value
+            .inputs
+            .iter()
+            .map(|inp| {
+                let name = inp.value.name.value.clone();
+                let detail = if inp.value.required {
+                    "required".to_string()
+                } else {
+                    "optional".to_string()
+                };
+                CompletionItem {
+                    label: name,
+                    kind: Some(CompletionItemKind::FIELD),
+                    detail: Some(detail),
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        if items.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(CompletionResponse::Array(items)))
     }
 
-    async fn hover(&self, _params: HoverParams) -> LspResult<Option<Hover>> {
-        Ok(None)
+    async fn hover(&self, params: HoverParams) -> LspResult<Option<Hover>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = &params.text_document_position_params.position;
+
+        // Get current document text
+        let text = {
+            let docs = self.documents.read().await;
+            match docs.get(uri) {
+                Some(t) => t.clone(),
+                None => return Ok(None),
+            }
+        };
+
+        // Extract the word at the cursor position
+        let word = extract_word_at_position(
+            &text,
+            position.line as usize,
+            position.character as usize,
+        );
+        let word = match word {
+            Some(w) => w,
+            None => return Ok(None),
+        };
+
+        // Look up in governance metadata table
+        let content = match governance_hover(&word) {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        Ok(Some(Hover {
+            contents: HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: content.to_string(),
+            }),
+            range: None,
+        }))
     }
 
     async fn goto_definition(
         &self,
-        _params: GotoDefinitionParams,
+        params: GotoDefinitionParams,
     ) -> LspResult<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = &params.text_document_position_params.position;
+        let uri_str = uri.as_str();
+
+        // Only handle .gtpl files (module references live in templates)
+        if !uri_str.ends_with(".gtpl") {
+            return Ok(None);
+        }
+
+        // Get document text
+        let text = {
+            let docs = self.documents.read().await;
+            match docs.get(uri) {
+                Some(t) => t.clone(),
+                None => return Ok(None),
+            }
+        };
+
+        // Parse template AST
+        let template = match parse_template_file(&text, uri_str) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+
+        // Span uses 1-indexed; LSP position is 0-indexed.
+        let cursor_line = position.line as u32 + 1;
+        let cursor_col = position.character as u32 + 1;
+
+        // Check if cursor is on a module_ref attribute span
+        for resource in &template.resources {
+            let mod_span = &resource.value.module_ref.span;
+            if cursor_line >= mod_span.start_line
+                && cursor_line <= mod_span.end_line
+                && cursor_col >= mod_span.start_col
+                && cursor_col <= mod_span.end_col
+            {
+                let module_name = &resource.value.module_ref.value;
+                let root = {
+                    let r = self.root_uri.read().await;
+                    r.clone()
+                };
+                let gmod_path = find_gmod_file(&root, module_name)?;
+                if let Some(path) = gmod_path {
+                    let target_uri_str = format!("file://{}", path.to_string_lossy());
+                    let target_uri = match target_uri_str.parse::<Uri>() {
+                        Ok(u) => u,
+                        Err(_) => return Ok(None),
+                    };
+                    return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                        uri: target_uri,
+                        range: Range {
+                            start: Position { line: 0, character: 0 },
+                            end: Position { line: 0, character: 0 },
+                        },
+                    })));
+                }
+            }
+        }
+
         Ok(None)
     }
 }
@@ -181,6 +372,112 @@ impl Backend {
         }
 
         self.client.publish_diagnostics(uri, diagnostics, version).await;
+    }
+}
+
+/// Extract the parent directory of a file:// URI as a file:// URI string, for use as a
+/// fallback search root when no workspace rootUri was provided at initialization.
+fn uri_to_parent_dir(uri_str: &str) -> Option<String> {
+    let path_str = uri_str.strip_prefix("file://")?;
+    let path = std::path::Path::new(path_str);
+    let parent = path.parent()?;
+    Some(format!("file://{}", parent.to_string_lossy()))
+}
+
+/// Search workspace root recursively for a .gmod file matching `module_name`.
+/// Returns the first match found, or None if not found or root is unknown.
+fn find_gmod_file(
+    root_uri: &Option<String>,
+    module_name: &str,
+) -> LspResult<Option<std::path::PathBuf>> {
+    let root_str = match root_uri {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+    // Strip "file://" prefix (handles both file:/// and file://)
+    let root_path = root_str
+        .strip_prefix("file://")
+        .unwrap_or(root_str.as_str());
+    let root = std::path::Path::new(root_path);
+    if !root.exists() {
+        return Ok(None);
+    }
+    let target_filename = format!("{}.gmod", module_name);
+    find_gmod_recursive(root, &target_filename, 0)
+}
+
+fn find_gmod_recursive(
+    dir: &std::path::Path,
+    target: &str,
+    depth: usize,
+) -> LspResult<Option<std::path::PathBuf>> {
+    if depth > 5 {
+        return Ok(None); // max depth guard
+    }
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(None),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            if path.file_name().and_then(|n| n.to_str()) == Some(target) {
+                return Ok(Some(path));
+            }
+        } else if path.is_dir() {
+            if let Some(found) = find_gmod_recursive(&path, target, depth + 1)? {
+                return Ok(Some(found));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Extract the identifier word at the given 0-indexed line and character position.
+fn extract_word_at_position(text: &str, line: usize, character: usize) -> Option<String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let line_str = lines.get(line)?;
+    let chars: Vec<char> = line_str.chars().collect();
+    let pos = character.min(chars.len());
+
+    // Scan left to find start of word
+    let mut start = pos;
+    while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
+        start -= 1;
+    }
+    // Scan right to find end of word
+    let mut end = pos;
+    while end < chars.len() && (chars[end].is_alphanumeric() || chars[end] == '_') {
+        end += 1;
+    }
+    if start == end {
+        return None;
+    }
+    Some(chars[start..end].iter().collect())
+}
+
+/// Static lookup of governance metadata field descriptions for hover.
+fn governance_hover(field_name: &str) -> Option<&'static str> {
+    match field_name {
+        "security_tier" => Some(
+            "**security_tier** — Security classification of this module.\n\nAccepted values: `\"critical\"`, `\"high\"`, `\"medium\"`, `\"low\"`",
+        ),
+        "compliance_frameworks" => Some(
+            "**compliance_frameworks** — Applicable compliance frameworks.\n\nExample: `\"soc2,pci-dss,hipaa\"`",
+        ),
+        "cost_tier" => Some(
+            "**cost_tier** — Cost category of this module.\n\nAccepted values: `\"xl\"`, `\"l\"`, `\"m\"`, `\"s\"`, `\"xs\"`",
+        ),
+        "data_classification" => Some(
+            "**data_classification** — Data sensitivity classification.\n\nAccepted values: `\"sensitive\"`, `\"internal\"`, `\"public\"`",
+        ),
+        "disaster_recovery_tier" => Some(
+            "**disaster_recovery_tier** — Disaster recovery tier requirement.\n\nExample: `\"none\"`, `\"warm\"`, `\"hot\"`",
+        ),
+        "approval_required" => Some(
+            "**approval_required** — Whether this module requires approver sign-off (EE only).\n\nAccepted values: `true`, `false`",
+        ),
+        _ => None,
     }
 }
 

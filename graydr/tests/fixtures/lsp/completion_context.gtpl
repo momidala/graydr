@@ -15,8 +15,9 @@ template "completion_context" {
   }
 
   resource "test-resource" {
+
     module = "completion_context_module"
-    inputs = {
+    inputs {
       vpc_id = "vpc-123"
       size   = "m"
       name   = "test"
