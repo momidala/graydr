@@ -1,0 +1,37 @@
+module "lsp_test_valid" {
+  metadata {
+    name        = "lsp_test_valid"
+    version     = "1.0.0"
+    description = "LSP integration test fixture — no errors"
+    authors     = ["test"]
+    tags        = ["test"]
+    lifecycle {
+      maturity = "stable"
+    }
+    governance {
+      security_tier         = "low"
+      compliance_frameworks = []
+      data_classification   = "public"
+    }
+  }
+  interface {
+    inputs {
+      provider { type = string, required = true }
+    }
+    outputs {
+      value { type = string }
+    }
+  }
+  generate {
+    case ($provider) {
+      "aws": {
+        code = <<-BODY
+          resource "null_resource" "test" {}
+        BODY
+        outputs {
+          value = "null_resource.test.id"
+        }
+      }
+    }
+  }
+}
