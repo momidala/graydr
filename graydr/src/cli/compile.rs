@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::path::Path;
 
 use anyhow::Context;
 use serde_yaml_ng::Value;
@@ -9,15 +8,15 @@ use serde_yaml_ng::Value;
 use crate::ast::common::Literal;
 use crate::cli::args::CompileArgs;
 use crate::graph::{DependencyGraph, assemble_by_provider_region};
+use crate::hooks::{CompileHooks, CompileSummary, ModuleUsage, ArmSelection};
 use crate::parser::module::parse_module_file;
 use crate::parser::template::parse_template_file;
-use crate::registry::{RegistryClient, RegistryConfig};
 use crate::resolver::context::ResolveContext;
 use crate::resolver::dispatch::dispatch_case;
 use crate::resolver::merge::{deep_merge, flatten_to_dotted, parse_cli_flag};
 use crate::codegen::assemble_output;
 
-pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
+pub fn run_compile(args: CompileArgs, hooks: &CompileHooks) -> anyhow::Result<()> {
     // ── Step 1: Read template file ─────────────────────────────────────────
     let template_path = args.template.to_string_lossy().to_string();
     let template_source = fs::read_to_string(&args.template)
@@ -36,16 +35,11 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
         let resource_name = resource.name.value.clone();
         let module_name = &resource.module_ref.value;
 
-        // Resolve .gmod path: search each include_path in order, first found wins.
-        let gmod_filename = format!("{}.gmod", module_name);
-        let gmod_path = args.include_path.iter()
-            .map(|p| p.join(&gmod_filename))
-            .find(|p| p.exists())
-            .unwrap_or_else(|| Path::new(&gmod_filename).to_path_buf());
-
-        let gmod_path_str = gmod_path.to_string_lossy().to_string();
-        let gmod_source = fs::read_to_string(&gmod_path)
-            .with_context(|| format!("reading module file {}", gmod_path_str))?;
+        // Use module resolver (EXT-1): abstracts filesystem or EE override.
+        let gmod_path_str = format!("{}.gmod", module_name);
+        let gmod_source = hooks.module_resolver
+            .resolve(module_name, &args.include_path)
+            .with_context(|| format!("resolving module {}", module_name))?;
 
         let module_def = parse_module_file(&gmod_source, &gmod_path_str)
             .with_context(|| format!("parsing module {}", gmod_path_str))?;
@@ -241,20 +235,11 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
     // ── Step 15+16: Render each group and concatenate output ──────────────
     let include_path = &args.include_path;
 
-    // Build an optional registry client when GRAYDR_REGISTRY_URL is configured.
-    // When set, expand_includes() will resolve registry coordinates via HTTP.
-    // When unset (empty), existing deferred-marker behavior is preserved.
-    let registry_config = RegistryConfig::from_env();
-    let registry_client = if !registry_config.base_url.is_empty() {
-        Some(RegistryClient::new(registry_config))
-    } else {
-        None
-    };
-
     let mut all_output = String::new();
 
     for group in &groups {
-        let result = assemble_output(group, &module_map, &arm_map, &ctx, &resource_map, include_path, registry_client.as_ref().map(|c| c as &dyn crate::hooks::RegistryBackend).as_deref())
+        // Use registry_backend from hooks (EXT-3): abstracted behind RegistryBackend trait.
+        let result = assemble_output(group, &module_map, &arm_map, &ctx, &resource_map, include_path, hooks.registry_backend.as_deref())
             .with_context(|| format!("assembling output for provider={} region={}", group.provider, group.region))?;
         if !all_output.is_empty() {
             all_output.push('\n');
@@ -275,6 +260,44 @@ pub fn run_compile(args: CompileArgs) -> anyhow::Result<()> {
         std::io::stdout()
             .write_all(all_output.as_bytes())
             .with_context(|| "writing output to stdout")?;
+    }
+
+    // ── Post-compile hook (EXT-2): build CompileSummary and fire on success ──
+    {
+        use std::collections::HashSet;
+        let sensitive_inputs: HashSet<String> = module_map.values()
+            .flat_map(|m| m.interface.value.inputs.iter())
+            .filter(|sw| sw.value.sensitive)
+            .map(|sw| sw.value.name.value.clone())
+            .collect();
+        let variable_values: HashMap<String, String> = ctx.all_values()
+            .map(|(k, v)| {
+                let val = if sensitive_inputs.contains(k) { "[REDACTED]".to_string() } else { v.to_string() };
+                (k.to_string(), val)
+            })
+            .collect();
+        let modules_used: Vec<ModuleUsage> = resource_map.iter()
+            .map(|(res_name, res)| ModuleUsage {
+                resource_name: res_name.clone(),
+                module_name: res.module_ref.value.clone(),
+                // MetadataBlock has no version field in CE — None until EE adds it
+                version: None,
+            })
+            .collect();
+        let arms_selected: Vec<ArmSelection> = arm_map.iter()
+            .map(|(res_name, arm)| ArmSelection {
+                resource_name: res_name.clone(),
+                arm_keys: arm.keys.iter().map(|k| k.value.clone()).collect(),
+            })
+            .collect();
+        let summary = CompileSummary {
+            modules_used,
+            arms_selected,
+            variable_values,
+            template_path: template_path.clone(),
+            project: None,  // CE always None; EE populates via --project flag
+        };
+        hooks.post_compile.on_compile_success(&summary);
     }
 
     Ok(())
