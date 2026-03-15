@@ -25,10 +25,22 @@ struct Backend {
     /// In-memory document state: URI -> latest text content.
     /// Populated by did_open/did_change, used by did_save as fallback.
     documents: Arc<RwLock<HashMap<Uri, String>>>,
+    /// Workspace root URI from initialize params — used for module file resolution.
+    /// Stored as a plain String (the URI's string form). None if client did not provide.
+    root_uri: Arc<RwLock<Option<String>>>,
 }
 
 impl LanguageServer for Backend {
-    async fn initialize(&self, _params: InitializeParams) -> LspResult<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> LspResult<InitializeResult> {
+        // Store workspace root for module resolution in completion/definition handlers
+        if let Some(uri) = params.root_uri {
+            *self.root_uri.write().await = Some(uri.to_string());
+        } else if let Some(folders) = params.workspace_folders {
+            if let Some(first) = folders.into_iter().next() {
+                *self.root_uri.write().await = Some(first.uri.to_string());
+            }
+        }
+
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
@@ -41,6 +53,13 @@ impl LanguageServer for Backend {
                         ..Default::default()
                     },
                 )),
+                completion_provider: Some(CompletionOptions {
+                    resolve_provider: Some(false),
+                    trigger_characters: None,
+                    ..Default::default()
+                }),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -103,6 +122,21 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri.clone();
         self.documents.write().await.remove(&uri);
         self.client.publish_diagnostics(uri, vec![], None).await;
+    }
+
+    async fn completion(&self, _params: CompletionParams) -> LspResult<Option<CompletionResponse>> {
+        Ok(None)
+    }
+
+    async fn hover(&self, _params: HoverParams) -> LspResult<Option<Hover>> {
+        Ok(None)
+    }
+
+    async fn goto_definition(
+        &self,
+        _params: GotoDefinitionParams,
+    ) -> LspResult<Option<GotoDefinitionResponse>> {
+        Ok(None)
     }
 }
 
@@ -208,6 +242,7 @@ pub fn run_lsp() {
             let (service, socket) = LspService::new(|client| Backend {
                 client,
                 documents: Arc::new(RwLock::new(HashMap::new())),
+                root_uri: Arc::new(RwLock::new(None)),
             });
             Server::new(tokio::io::stdin(), tokio::io::stdout(), socket)
                 .serve(service)
