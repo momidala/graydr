@@ -1,6 +1,4 @@
 // Integration tests for `graydr lint` CLI.
-// These tests are #[ignore]d until Plan 03 wires the graydr lint subcommand.
-// Remove #[ignore] after Plan 03 is complete.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -20,7 +18,6 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 #[test]
-#[ignore]
 fn test_lint_warnings_exit_zero() {
     // graydr lint (no --strict) exits 0 even when warnings are present
     let output = Command::new(graydr_bin())
@@ -31,7 +28,6 @@ fn test_lint_warnings_exit_zero() {
 }
 
 #[test]
-#[ignore]
 fn test_lint_strict_exit_code() {
     // graydr lint --strict exits non-zero when warnings are present
     let output = Command::new(graydr_bin())
@@ -42,7 +38,6 @@ fn test_lint_strict_exit_code() {
 }
 
 #[test]
-#[ignore]
 fn test_lint_clean_module_exits_zero() {
     // graydr lint --strict exits 0 for a clean module
     let output = Command::new(graydr_bin())
@@ -53,7 +48,6 @@ fn test_lint_clean_module_exits_zero() {
 }
 
 #[test]
-#[ignore]
 fn test_lint_sweep_reference_modules() {
     // graydr lint against all v1.2 reference modules exits 0 (no errors; warnings are ok)
     // Reference modules lack type annotations — they will produce missing-type warnings.

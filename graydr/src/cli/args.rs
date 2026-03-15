@@ -60,3 +60,13 @@ pub struct FmtArgs {
     #[arg(long, help = "Check if files are canonical without rewriting; exits non-zero if any file would change")]
     pub check: bool,
 }
+
+/// Arguments for the `lint` subcommand.
+#[derive(Parser, Debug)]
+pub struct LintArgs {
+    /// .gmod files to lint (accepts multiple files)
+    pub files: Vec<PathBuf>,
+    /// Exit non-zero for warnings in addition to errors (CI enforcement mode)
+    #[arg(long, help = "Exit non-zero for warnings in addition to errors")]
+    pub strict: bool,
+}
