@@ -3,6 +3,7 @@ pub mod cli;
 pub mod codegen;
 pub mod fmt;
 pub mod graph;
+pub mod hooks;
 pub mod lint;
 pub mod parser;
 pub mod fragment;
