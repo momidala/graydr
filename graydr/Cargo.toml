@@ -1,6 +1,6 @@
 [package]
 name = "graydr"
-version = "1.2.0"
+version = "1.0.0"
 edition = "2021"
 description = "Multi-cloud IaC compiler — write once, compile to CloudFormation, Bicep, or Terraform"
 license = "AGPL-3.0-only"

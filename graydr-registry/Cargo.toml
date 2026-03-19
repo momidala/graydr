@@ -1,6 +1,6 @@
 [package]
 name = "graydr-registry"
-version = "1.2.0"
+version = "1.0.0"
 edition = "2021"
 description = "Self-hostable module registry server for graydr"
 license = "AGPL-3.0-only"
